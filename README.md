@@ -43,7 +43,7 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 
 ### Method 1: Drag-and-Drop Install (Recommended)
 
-1. Download `NotebookLM-Flashcard-Generator.ankiaddon` from the [Releases page](https://github.com/DrTakotsubo/notebooklm-flashcard-generator/releases)
+1. Download `NotebookLM-Flashcard-Generator.ankiaddon` from the [Latest Release](https://github.com/DrTakotsubo/notebooklm-flashcard-generator/releases/latest)
 2. Open Anki
 3. Drag and drop the `.ankiaddon` file onto Anki's main window
 4. Click **Yes** on the confirmation dialog
