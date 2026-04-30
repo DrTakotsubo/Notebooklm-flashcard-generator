@@ -1,0 +1,7 @@
+{
+  "name": "NotebookLM Flashcard Generator",
+  "author": "Takotsubo",
+  "version": "1.0.0",
+  "anki_version": "2.1.50",
+  "description": "Generate Anki flashcards from PDF documents using Google NotebookLM AI"
+}

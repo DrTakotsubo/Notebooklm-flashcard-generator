@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+
+# Anki addon bundled dependencies (keep locally, don't push to repo)
+libs/
+
+# Anki addon package (attach to GitHub Releases instead)
+*.ankiaddon
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Anki specific
+notebooklm_generated/
