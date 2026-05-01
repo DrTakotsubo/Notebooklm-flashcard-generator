@@ -3,6 +3,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Anki Version](https://img.shields.io/badge/Anki-2.1.50+-green.svg)](https://apps.ankiweb.net/)
 
+> ⚠️ **Important Prerequisite: Python Required!**
+>
+> This addon **does NOT bundle Python**. You MUST install Python separately:
+> 1. Download from: https://www.python.org/downloads/
+> 2. **CHECK "Add Python to PATH"** during installation (critical!)
+> 3. Verify: Open Command Prompt → type `python --version`
+> If you see "python not found", you missed step 2. Reinstall Python.
+>
+> The `libs/` folder bundles dependencies (notebooklm-py), NOT Python itself.
+
 An Anki addon that generates flashcards from PDF documents using Google's NotebookLM AI. Perfect for students, researchers, and medical professionals who want to convert study materials into spaced repetition flashcards automatically.
 
 ## What This Addon Does
