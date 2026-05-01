@@ -20,9 +20,11 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 - ✅ **Saves hours** of manual flashcard creation
 - ✅ **Unlimited flashcards** - no upper limit on generation
 - ✅ **Multiple prompt templates** for different learning needs
+- ✅ **Custom prompts** - add, edit, and delete your own prompts through GUI
 - ✅ **Cross-platform** - works on Linux, Windows, and macOS
 - ✅ **Privacy-focused** - uses your own Google account, no third-party data collection
 - ✅ **Bundled dependencies** - no manual pip install required
+- ✅ **Easy authentication** - one-click helper scripts for all platforms
 
 ---
 
@@ -31,6 +33,7 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 - [Installation](#installation)
 - [First-Time Setup](#first-time-setup)
 - [How to Use](#how-to-use)
+- [Managing Prompts](#managing-prompts)
 - [Prompt Templates](#prompt-templates)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
@@ -41,7 +44,28 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 
 ## Installation
 
-### Method 1: Drag-and-Drop Install (Recommended)
+### Method 1: One-Command Install (Easiest)
+
+Run this single command in your terminal:
+
+**Linux/macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-generator/main/install.sh | bash
+```
+
+**Windows (Command Prompt):**
+```cmd
+curl -sSL https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-generator/main/install.bat -o install.bat && install.bat
+```
+
+This will:
+1. Detect your OS and Anki directory
+2. Download/clone the addon automatically
+3. Prompt you to restart Anki
+
+---
+
+### Method 2: Drag-and-Drop Install (Recommended)
 
 1. Download `NotebookLM-Flashcard-Generator.ankiaddon` from the [Latest Release](https://github.com/DrTakotsubo/notebooklm-flashcard-generator/releases/latest)
 2. Open Anki
@@ -49,7 +73,9 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 4. Click **Yes** on the confirmation dialog
 5. Restart Anki when prompted
 
-### Method 2: Manual Install
+---
+
+### Method 3: Manual Install
 
 1. Download and unzip the addon source code
 2. Locate your Anki addons folder:
@@ -57,9 +83,8 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
    - **Linux (Flatpak)**: `~/.var/app/net.ankiweb.Anki/data/Anki2/addons21/`
    - **Windows**: Press `Win+R` → type `%APPDATA%\Anki2\addons21\` → press Enter
    - **macOS**: Finder → `Cmd+Shift+G` → type `~/Library/Application Support/Anki2/addons21/`
-3. Copy the `notebookadd` folder into the addons21 folder
-4. Rename the folder to `notebooklm-flashcard-generator`
-5. Restart Anki
+3. Copy the `notebooklm-flashcard-generator` folder into the addons21 folder
+4. Restart Anki
 
 ---
 
@@ -69,29 +94,31 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 
 - **Anki 2.1.50+** installed ([download here](https://apps.ankiweb.net/))
 - **Google Account** with access to [NotebookLM](https://notebooklm.google.com/) (must be available in your region)
-- The `NotebookLM-Flashcard-Generator.ankiaddon` file
 
 ### Step 2: Authenticate with Google
 
 The addon uses NotebookLM's API, which requires a one-time Google authentication.
 
-#### Find Your Addon Directory
+#### **Easiest Method (All Platforms):**
 
-Use the same addons path from Installation Method 2. The addon folder will be named `notebooklm-flashcard-generator`.
+1. Open Anki → **Tools** → **Addons**
+2. Select "NotebookLM Flashcard Generator"
+3. Click **View Files** button (opens addon folder in Explorer/Finder)
+4. **Windows**: Double-click `auth_helper.bat`
+5. **Linux/macOS**: Right-click `auth_helper.sh` → "Run" or run `./auth_helper.sh` in terminal
 
-#### Run Login Command
+#### **Alternative: Manual Command Line**
 
 **Linux/macOS:**
 ```bash
-cd ~/.local/share/Anki2/addons21/notebooklm-flashcard-generator
-PYTHONPATH=./libs python3 -m notebooklm login
+cd ~/.local/share/Anki2/addons21/notebooklm-flashcard-generator  # Adjust for Flatpak if needed
+bash auth_helper.sh
 ```
 
-**Windows (Command Prompt):**
+**Windows:**
 ```cmd
 cd %APPDATA%\Anki2\addons21\notebooklm-flashcard-generator
-set PYTHONPATH=.\libs
-python -m notebooklm login
+auth_helper.bat
 ```
 
 #### Complete OAuth in Browser
@@ -102,7 +129,7 @@ python -m notebooklm login
 4. Terminal will show "Authentication successful"
 5. Your session is saved to `~/.notebooklm/` (Linux/macOS) or `C:\Users\You\.notebooklm\` (Windows)
 
-> **Note:** Authentication expires after ~30 days. Re-run the login command when needed.
+> **Note:** Authentication expires after ~30 days. Re-run the auth helper when needed.
 
 ---
 
@@ -124,12 +151,13 @@ python -m notebooklm login
 
 #### 3. Select a Prompt Template
 
-Choose from the dropdown menu:
+- Choose from the dropdown menu or click **Manage Prompts** to customize
 - **NEET-PG: Macro/Micro (All Subjects)** - Comprehensive medical flashcards
 - **NEET-PG: DOC, M/C, IOC, Genes** - Fact-based medical flashcards
 - **Medical Practical Exams (Verbatim)** - Exact textbook content extraction
+- **Your custom prompts** - if you've added any via Prompt Manager
 
-> **Tip:** You can customize or add new prompts by editing the `NOTEBOOKLM_PROMPTS` dictionary in `__init__.py`
+> **Tip:** Click **Manage Prompts** to add, edit, or delete prompt templates through a GUI.
 
 #### 4. Select Your PDF File
 
@@ -157,6 +185,44 @@ Choose from the dropdown menu:
 - A success message will show the number of flashcards added
 - Open your Anki deck to review the new cards
 - Cards are created as "Basic" note type with "Front" and "Back" fields
+
+---
+
+## Managing Prompts
+
+### Opening Prompt Manager
+
+1. Open the addon dialog (**Tools** → **Import from NotebookLM...**)
+2. Click **Manage Prompts** (next to the Prompt dropdown)
+3. A new window will open showing all available prompts
+
+### Adding a New Prompt
+
+1. Click **Add New**
+2. Enter a **Prompt Name** (e.g., "My Custom Prompt")
+3. Enter the **Prompt Text** - must instruct NotebookLM to return JSON with "Front" and "Back" keys
+4. Click **Save Prompt**
+
+**Example prompt template:**
+```
+You are an expert tutor. Analyze the provided document and generate flashcards.
+Return ONLY a valid JSON array of objects with "Front" and "Back" keys.
+Generate as many relevant, high-quality flashcards as possible from the source material, with no upper limit.
+```
+
+### Editing Prompts
+
+- **Default prompts** (NEET-PG, etc.) cannot be edited - they are read-only
+- **Custom prompts** (added by you) can be edited freely
+
+### Deleting Prompts
+
+- **Default prompts** cannot be deleted
+- **Custom prompts** can be deleted (click **Delete** button)
+
+### Saving
+
+All custom prompts are saved to `user_prompts.json` in the addon folder and persist across Anki restarts.
 
 ---
 
@@ -209,7 +275,7 @@ Edit the configuration variables at the top of `__init__.py` (lines 1-159):
 
 ### `NOTEBOOKLM_PROMPTS`
 
-Add or modify prompt templates:
+Add or modify prompt templates (note: use Prompt Manager GUI instead for easier management):
 
 ```python
 NOTEBOOKLM_PROMPTS = {
@@ -221,12 +287,12 @@ Generate as many relevant, high-quality flashcards as possible from the source m
 }
 ```
 
-### `FLASHCARD_NOTE_TYPE`
+### `FLASHARD_NOTE_TYPE`
 
 Change the Anki note type (default: `"Basic"`):
 
 ```python
-FLASHCARD_NOTE_TYPE = "Basic"  # or "Cloze", "Basic (and reversed)", etc.
+FLASHARD_NOTE_TYPE = "Basic"  # or "Cloze", "Basic (and reversed)", etc.
 ```
 
 ### `ADDON_MENU_TEXT`
@@ -252,11 +318,13 @@ NOTEBOOKLM_NOTEBOOK_NAME = "Anki Flashcard Notebook"
 | Issue | Solution |
 |-------|----------|
 | **"notebooklm library not found"** | Reinstall addon → ensure `libs/` folder exists in addon directory |
-| **"Authentication failed"** | Re-run login command: `python -m notebooklm login`<br>Sessions expire ~30 days<br>Disable VPN/adblockers temporarily |
+| **"Authentication failed"** | Re-run auth helper: `auth_helper.bat` (Windows) or `./auth_helper.sh` (Linux/macOS)<br>Sessions expire ~30 days<br>Disable VPN/adblockers temporarily |
 | **"Could not extract valid JSON"** | NotebookLM added conversational text<br>Try re-running the generation<br>Simplify the prompt if persistent |
 | **PDF upload fails** | Use non-password-protected PDF<br>Check internet connection<br>Ensure PDF isn't corrupted |
 | **Addon missing from Tools menu** | Fully restart Anki<br>Confirm addon folder is in correct `addons21` directory<br>Check Anki's addon manager for errors |
 | **"No module named notebooklm"** | Verify `libs/notebooklm` directory exists<br>Reinstall addon if missing |
+| **"python not found" on Windows** | 1. Try `py -m notebooklm login` instead<br>2. If still fails, install Python from python.org<br>3. Check "Add Python to PATH" during install |
+| **"Folder not found" on Windows** | 1. Open Anki → Tools → Addons<br>2. Right-click "NotebookLM Flashcard Generator"<br>3. Click "View Files" to open folder<br>4. Use that path in Command Prompt |
 
 ### Debug Steps
 

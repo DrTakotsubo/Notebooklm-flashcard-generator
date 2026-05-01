@@ -171,6 +171,7 @@ from aqt.qt import (
 from aqt.utils import showWarning, showInfo, tooltip
 
 from . import notebooklm
+from .prompt_manager import load_prompts, PromptManagerDialog
 
 
 # -----------------------------------------------------------------------------
@@ -253,6 +254,12 @@ class NotebookLMDialog(QDialog):
         self.prompt_selector = QComboBox()
         prompt_layout.addWidget(prompt_label)
         prompt_layout.addWidget(self.prompt_selector)
+        
+        # Manage Prompts button
+        self.manage_prompts_btn = QPushButton("Manage Prompts")
+        self.manage_prompts_btn.setStyleSheet("font-size: 12px; padding: 5px;")
+        self.manage_prompts_btn.clicked.connect(self._manage_prompts)
+        prompt_layout.addWidget(self.manage_prompts_btn)
 
         # Deck selector
         deck_layout = QHBoxLayout()
@@ -310,7 +317,8 @@ class NotebookLMDialog(QDialog):
     def _populate_prompts(self):
         """Fill the prompt dropdown with configured prompts."""
         self.prompt_selector.clear()
-        for name in NOTEBOOKLM_PROMPTS:
+        prompts = load_prompts(NOTEBOOKLM_PROMPTS)
+        for name in sorted(prompts.keys()):
             self.prompt_selector.addItem(name)
 
     # -- File browsing --------------------------------------------------------
@@ -377,10 +385,46 @@ class NotebookLMDialog(QDialog):
         self.generate_btn.setEnabled(True)
         self.generate_btn.setText("Generate Flashcards")
         self.progress_label.setVisible(False)
-        showWarning(
-            f"An error occurred during flashcard generation:\n\n{error_message}",
-            title="Generation Failed",
-        )
+        
+        # More user-friendly error messages
+        if "Authentication" in error_message or "401" in error_message:
+            showWarning(
+                f"❌ Authentication Error\n\n"
+                f"NotebookLM authentication failed.\n\n"
+                f"Please run the authentication helper:\n"
+                f"- Windows: Double-click auth_helper.bat in addon folder\n"
+                f"- Linux/macOS: Run ./auth_helper.sh\n\n"
+                f"Original error: {error_message}",
+                title="Authentication Failed"
+            )
+        elif "Could not extract valid JSON" in error_message:
+            showWarning(
+                f"❌ Flashcard Generation Error\n\n"
+                f"NotebookLM returned an invalid response.\n\n"
+                f"Try:\n"
+                f"1. Re-running the generation\n"
+                f"2. Using a smaller PDF\n"
+                f"3. Simplifying the prompt\n\n"
+                f"Original error: {error_message[:500]}",
+                title="Generation Failed"
+            )
+        else:
+            showWarning(
+                f"❌ An error occurred:\n\n{error_message}",
+                title="Error"
+            )
+
+    def _manage_prompts(self):
+        """Open the prompt management dialog."""
+        # Load current prompts
+        current_prompts = load_prompts(NOTEBOOKLM_PROMPTS)
+        default_keys = list(NOTEBOOKLM_PROMPTS.keys())
+        
+        dialog = PromptManagerDialog(current_prompts, default_keys, self)
+        if dialog.exec():
+            # Update the dropdown with new prompts
+            self._populate_prompts()
+            showInfo("Prompts updated successfully!", title="Prompts Saved")
 
     # -- Anki note creation ---------------------------------------------------
 
