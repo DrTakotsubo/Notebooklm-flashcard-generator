@@ -13,22 +13,21 @@ set PYTHONPATH=%~dp0libs%
 echo Setting PYTHONPATH to: %PYTHONPATH%
 echo.
 
-REM Try multiple Python commands
-python --version >nul 2>&1
+REM Check if Python is available
+where python >nul 2>&1
 if %errorlevel%==0 (
     echo Using: python
-    python -m notebooklm login
-    goto :check
+    goto :run_auth
 )
 
-py --version >nul 2>&1
+where py >nul 2>&1
 if %errorlevel%==0 (
     echo Using: py launcher
     py -m notebooklm login
     goto :check
 )
 
-python3 --version >nul 2>&1
+where python3 >nul 2>&1
 if %errorlevel%==0 (
     echo Using: python3
     python3 -m notebooklm login
@@ -47,10 +46,22 @@ echo 3. After installing, RESTART your computer.
 echo 4. Run this script again.
 echo.
 echo If you already installed Python, it might not be in PATH.
-echo Try running: python --version (in Command Prompt)
+echo Try opening Command Prompt and type: python --version
 echo ==============================================
 pause
 exit /b 1
+
+:run_auth
+REM Try to run notebooklm login
+python -m notebooklm login 2>nul
+if %errorlevel%==0 goto :check
+
+REM If failed, try with explicit browser path
+echo.
+echo Trying alternative browser launch method...
+python -c "import webbrowser; webbrowser.open('https://notebooklm.google.com')" 2>nul
+python -m notebooklm login --no-browser
+goto :check
 
 :check
 if %errorlevel%==0 (
@@ -68,6 +79,7 @@ if %errorlevel%==0 (
     echo 1. NotebookLM not available in your country
     echo 2. Google authentication expired (re-run this script)
     echo 3. VPN/AdBlocker blocking the connection
+    echo 4. Browser not opening? Try disabling popup blockers
     echo ==============================================
 )
 pause
