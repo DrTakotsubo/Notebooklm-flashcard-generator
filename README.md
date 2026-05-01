@@ -44,7 +44,18 @@ This addon bridges Anki with Google NotebookLM to automate flashcard creation:
 
 ## Installation
 
-### Method 1: One-Command Install (Easiest)
+### Method 1: Drag-and-Drop Install (Easiest - Recommended)
+
+1. Download `NotebookLM-Flashcard-Generator.ankiaddon` from the [Latest Release](https://github.com/DrTakotsubo/notebooklm-flashcard-generator/releases/latest)
+2. Open Anki
+3. Drag and drop the `.ankiaddon` file onto Anki's main window
+4. Click **Yes** on the confirmation dialog
+5. Restart Anki when prompted
+6. Run authentication (see First-Time Setup below)
+
+---
+
+### Method 2: One-Command Install
 
 Run this single command in your terminal:
 
@@ -55,7 +66,14 @@ curl -sSL https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-gen
 
 **Windows (Command Prompt):**
 ```cmd
-curl -sSL https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-generator/main/install.bat -o install.bat && install.bat
+curl -sSL https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-generator/main/install.bat -o install.bat
+install.bat
+```
+
+**Windows (PowerShell - if cmd fails):**
+```powershell
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DrTakotsubo/notebooklm-flashcard-generator/main/install.bat' -OutFile 'install.bat'
+.\install.bat
 ```
 
 This will:
@@ -65,7 +83,7 @@ This will:
 
 ---
 
-### Method 2: Drag-and-Drop Install (Recommended)
+### Method 3: Manual Install
 
 1. Download `NotebookLM-Flashcard-Generator.ankiaddon` from the [Latest Release](https://github.com/DrTakotsubo/notebooklm-flashcard-generator/releases/latest)
 2. Open Anki
