@@ -13,23 +13,45 @@ set PYTHONPATH=%~dp0libs%
 echo Setting PYTHONPATH to: %PYTHONPATH%
 echo.
 
-REM Check if Python is available
-where python >nul 2>&1
+REM Try multiple Python commands
+python --version >nul 2>&1
 if %errorlevel%==0 (
     echo Using: python
-    goto :run_auth
+    echo Opening browser for Google login...
+    python -c "import webbrowser; webbrowser.open('https://notebooklm.google.com/')"
+    echo.
+    echo COMPLETE the Google login in the browser, then come back here.
+    echo.
+    pause
+    echo Running authentication...
+    python -m notebooklm login
+    goto :check
 )
 
-where py >nul 2>&1
+py --version >nul 2>&1
 if %errorlevel%==0 (
     echo Using: py launcher
+    echo Opening browser for Google login...
+    py -c "import webbrowser; webbrowser.open('https://notebooklm.google.com/')"
+    echo.
+    echo COMPLETE the Google login in the browser, then come back here.
+    echo.
+    pause
+    echo Running authentication...
     py -m notebooklm login
     goto :check
 )
 
-where python3 >nul 2>&1
+python3 --version >nul 2>&1
 if %errorlevel%==0 (
     echo Using: python3
+    echo Opening browser for Google login...
+    python3 -c "import webbrowser; webbrowser.open('https://notebooklm.google.com/')"
+    echo.
+    echo COMPLETE the Google login in the browser, then come back here.
+    echo.
+    pause
+    echo Running authentication...
     python3 -m notebooklm login
     goto :check
 )
@@ -51,18 +73,6 @@ echo ==============================================
 pause
 exit /b 1
 
-:run_auth
-REM Try to run notebooklm login
-python -m notebooklm login 2>nul
-if %errorlevel%==0 goto :check
-
-REM If failed, try with explicit browser path
-echo.
-echo Trying alternative browser launch method...
-python -c "import webbrowser; webbrowser.open('https://notebooklm.google.com')" 2>nul
-python -m notebooklm login --no-browser
-goto :check
-
 :check
 if %errorlevel%==0 (
     echo.
@@ -79,7 +89,7 @@ if %errorlevel%==0 (
     echo 1. NotebookLM not available in your country
     echo 2. Google authentication expired (re-run this script)
     echo 3. VPN/AdBlocker blocking the connection
-    echo 4. Browser not opening? Try disabling popup blockers
+    echo 4. Browser didn't open? Try disabling popup blockers
     echo ==============================================
 )
 pause
