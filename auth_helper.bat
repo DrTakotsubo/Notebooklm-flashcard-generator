@@ -1,113 +1,118 @@
 @echo off
+chcp 65001 >nul
 echo ==============================================
 echo NotebookLM Flashcard Generator - Auth Helper
 echo ==============================================
 echo.
 
-REM Get the directory where this bat file is located (use FOR to handle admin context)
+REM Get the directory where this bat file is located
 for %%i in ("%~dp0.") do set "ADDON_DIR=%%~fi"
 cd /d "%ADDON_DIR%"
 
-REM Set PYTHONPATH to use bundled libs (use absolute path)
+REM Set PYTHONPATH to use bundled libs
 set "PYTHONPATH=%ADDON_DIR%\libs"
-
-echo Setting PYTHONPATH to: %PYTHONPATH%
+echo PYTHONPATH set to: %PYTHONPATH%
 echo.
 
-REM Try multiple Python commands
+REM Try multiple Python commands - find the FIRST working one
+set PYTHON_CMD=
+
+REM Try python first
 python --version >nul 2>&1
-if %errorlevel%==0 (
-    set PYTHON_CMD=python
-    goto :check_playwright
+if %errorlevel%==0 set PYTHON_CMD=python
+
+REM Try py next
+if "%PYTHON_CMD%"=="" (
+    py --version >nul 2>&1
+    if !errorlevel!==0 set PYTHON_CMD=py
 )
 
-py --version >nul 2>&1
-if %errorlevel%==0 (
-    set PYTHON_CMD=py
-    goto :check_playwright
+REM Try python3 next
+if "%PYTHON_CMD%"=="" (
+    python3 --version >nul 2>&1
+    if !errorlevel!==0 set PYTHON_CMD=python3
 )
 
-python3 --version >nul 2>&1
-if %errorlevel%==0 (
-    set PYTHON_CMD=python3
-    goto :check_playwright
+if "%PYTHON_CMD%"=="" (
+    echo ==============================================
+    echo ERROR: Python not found!
+    echo.
+    echo This addon REQUIRES Python to be installed separately.
+    echo.
+    echo 1. Download Python from: https://www.python.org/downloads/
+    echo 2. IMPORTANT: Check "Add Python to PATH" during installation!
+    echo 3. After installing, RESTART your computer.
+    echo 4. Run this script again.
+    echo ==============================================
+    pause
+    exit /b 1
 )
 
-echo.
-echo ==============================================
-echo ERROR: Python not found!
-echo.
-echo This addon REQUIRES Python to be installed separately.
-echo.
-echo 1. Download Python from: https://www.python.org/downloads/
-echo 2. IMPORTANT: Check "Add Python to PATH" during installation!
-echo 3. After installing, RESTART your computer.
-echo 4. Run this script again.
-echo ==============================================
-pause
-exit /b 1
-
-:check_playwright
 echo Using Python: %PYTHON_CMD%
 echo.
 
-REM Check if playwright is available (PYTHONPATH is already set at top of script)
+:check_playwright
+echo Checking if Playwright is installed...
 %PYTHON_CMD% -c "import playwright" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Playwright not found. Installing to addon directory...
-    echo This may take a few minutes...
-    echo.
-    
-    REM Clear pip cache first (user had cache deserialization errors)
-    %PYTHON_CMD% -m pip cache purge >nul 2>&1
-    
-    REM Install playwright with all dependencies (use --upgrade to handle existing dirs)
-    %PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" playwright pyee greenlet typing-extensions
-    if %errorlevel% neq 0 (
-        echo.
-        echo ERROR: Failed to install Playwright and dependencies.
-        echo.
-        echo Possible causes:
-        echo 1. No internet connection
-        echo 2. Firewall blocking pip
-        echo 3. Running as administrator with restricted network access
-        echo.
-        echo Solutions:
-        echo 1. Run this script as a REGULAR user (not administrator)
-        echo 2. Temporarily disable firewall/antivirus
-        echo 3. Try manual install: pip install playwright
-        echo.
-        pause
-        exit /b 1
-    )
-    
-    REM Verify installation (PYTHONPATH is already set, no need for sys.path.insert)
-    %PYTHON_CMD% -c "import playwright; import pyee; import greenlet; print('Verification OK')" >nul 2>&1
-    if %errorlevel% neq 0 (
-        echo.
-        echo ERROR: Installation verification failed.
-        echo Playwright was installed but cannot be imported.
-        echo.
-        echo Debug: Check if PYTHONPATH is correct:
-        %PYTHON_CMD% -c "import sys; print('sys.path:', sys.path[:3])"
-        echo.
-        echo Possible causes:
-        echo 1. Python cache issue - restart Command Prompt
-        echo 2. Path with spaces issue
-        echo 3. Administrator privileges interfering
-        echo.
-        echo Please try:
-        echo 1. Run as a REGULAR user (not administrator)
-        echo 2. Close and reopen Command Prompt
-        echo 3. Manually run: python -c "import playwright"
-        echo.
-        pause
-        exit /b 1
-    )
-    
-    echo Playwright and dependencies installed successfully.
-    echo.
+
+if %errorlevel%==0 (
+    echo Playwright already installed.
+    goto :ask_browser
 )
+
+echo Playwright not found. Installing now...
+echo This may take a few minutes...
+echo.
+
+REM Clear pip cache first (fixes deserialization errors)
+%PYTHON_CMD% -m pip cache purge >nul 2>&1
+
+REM Install playwright with all dependencies
+%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" playwright pyee greenlet typing-extensions
+
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Failed to install Playwright and dependencies.
+    echo.
+    echo Possible causes:
+    echo 1. No internet connection
+    echo 2. Firewall blocking pip
+    echo 3. Running as administrator with restricted network access
+    echo.
+    echo Solutions:
+    echo 1. Run this script as a REGULAR user (not administrator)
+    echo 2. Temporarily disable firewall/antivirus
+    echo 3. Try manual install in Command Prompt:
+    echo    %PYTHON_CMD% -m pip install playwright
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo Verifying installation...
+%PYTHON_CMD% -c "import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
+
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Installation verification failed.
+    echo Playwright was installed but cannot be imported.
+    echo.
+    echo Debug information:
+    echo Python command used: %PYTHON_CMD%
+    echo PYTHONPATH: %PYTHONPATH%
+    echo.
+    echo Please try:
+    echo 1. Close and reopen Command Prompt
+    echo 2. Run as a REGULAR user (not administrator)
+    echo 3. Manually run: %PYTHON_CMD% -c "import playwright"
+    echo.
+    pause
+    exit /b 1
+)
+
+echo Playwright and dependencies installed successfully.
+echo.
 
 :ask_browser
 echo ==============================================
@@ -155,16 +160,6 @@ if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
 REM Try to find chrome in PATH
 for %%i in (chrome.exe) do set CHROME_PATH=%%~$PATH:i
 if not "%CHROME_PATH%"=="" (
-    set NOTEBOOKLM_BROWSER_PATH=%CHROME_PATH%
-    goto :verify_chrome
-)
-
-REM Try python to find chrome
-%PYTHON_CMD% -c "import shutil; p=shutil.which('chrome'); print(p or '')" > "%temp%\chrome_path.txt" 2>nul
-set /p CHROME_PATH=<%temp%\chrome_path.txt
-del "%temp%\chrome_path.txt" >nul 2>&1
-
-if exist "%CHROME_PATH%" (
     set NOTEBOOKLM_BROWSER_PATH=%CHROME_PATH%
     goto :verify_chrome
 )
