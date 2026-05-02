@@ -51,15 +51,18 @@ exit /b 1
 echo Using Python: %PYTHON_CMD%
 echo.
 
-REM Check if playwright is available (with PYTHONPATH set)
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright" >nul 2>&1
+REM Check if playwright is available (PYTHONPATH is already set at top of script)
+%PYTHON_CMD% -c "import playwright" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Playwright not found. Installing to addon directory...
     echo This may take a few minutes...
     echo.
     
-    REM Install playwright with all dependencies
-    %PYTHON_CMD% -m pip install playwright pyee greenlet typing-extensions --target="%ADDON_DIR%\libs"
+    REM Clear pip cache first (user had cache deserialization errors)
+    %PYTHON_CMD% -m pip cache purge >nul 2>&1
+    
+    REM Install playwright with all dependencies (use --upgrade to handle existing dirs)
+    %PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" playwright pyee greenlet typing-extensions
     if %errorlevel% neq 0 (
         echo.
         echo ERROR: Failed to install Playwright and dependencies.
@@ -78,12 +81,25 @@ if %errorlevel% neq 0 (
         exit /b 1
     )
     
-    REM Verify installation
-    %PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('Verification OK')" >nul 2>&1
+    REM Verify installation (PYTHONPATH is already set, no need for sys.path.insert)
+    %PYTHON_CMD% -c "import playwright; import pyee; import greenlet; print('Verification OK')" >nul 2>&1
     if %errorlevel% neq 0 (
         echo.
-        echo ERROR: Playwright installed but dependencies missing.
-        echo Please try running as a regular user (not administrator).
+        echo ERROR: Installation verification failed.
+        echo Playwright was installed but cannot be imported.
+        echo.
+        echo Debug: Check if PYTHONPATH is correct:
+        %PYTHON_CMD% -c "import sys; print('sys.path:', sys.path[:3])"
+        echo.
+        echo Possible causes:
+        echo 1. Python cache issue - restart Command Prompt
+        echo 2. Path with spaces issue
+        echo 3. Administrator privileges interfering
+        echo.
+        echo Please try:
+        echo 1. Run as a REGULAR user (not administrator)
+        echo 2. Close and reopen Command Prompt
+        echo 3. Manually run: python -c "import playwright"
         echo.
         pause
         exit /b 1

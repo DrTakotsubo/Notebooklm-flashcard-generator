@@ -43,14 +43,18 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
-# Check if playwright Python package is available (with PYTHONPATH set)
-if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" &> /dev/null; then
+# Check if playwright Python package is available (PYTHONPATH is already set)
+if ! $PYTHON_CMD -c "import playwright" &> /dev/null; then
     echo "Playwright not found. Installing to addon directory..."
     echo "This may take a few minutes..."
     echo
     
-    # Install playwright with all dependencies
-    $PYTHON_CMD -m pip install playwright pyee greenlet typing-extensions --target="$SCRIPT_DIR/libs"
+    # Clear pip cache first (user had cache deserialization errors)
+    $PYTHON_CMD -m pip cache purge &> /dev/null || true
+    
+    # Install playwright with all dependencies (use --upgrade to handle existing dirs)
+    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" playwright pyee greenlet typing-extensions
+    
     if [[ $? -ne 0 ]]; then
         echo
         echo "ERROR: Failed to install Playwright and dependencies."
@@ -63,6 +67,35 @@ if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import 
         echo "1. Check your internet connection"
         echo "2. Temporarily disable firewall/antivirus"
         echo "3. Try running as a regular user (not sudo)"
+        echo
+        exit 1
+    fi
+    
+    # Verify installation (PYTHONPATH is already set, no need for sys.path.insert)
+    if ! $PYTHON_CMD -c "import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo
+        echo "ERROR: Installation verification failed."
+        echo "Playwright was installed but cannot be imported."
+        echo
+        echo "Debug: Check if PYTHONPATH is correct:"
+        echo "PYTHONPATH: $PYTHONPATH"
+        echo
+        echo "Please try:"
+        echo "1. Run as a REGULAR user (not sudo/administrator)"
+        echo "2. Close and reopen terminal"
+        echo "3. Manually run: python3 -c 'import playwright'"
+        echo
+        exit 1
+    fi
+    
+    echo "Playwright and dependencies installed successfully."
+fi
+    
+    # Verify installation
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo
+        echo "ERROR: Playwright installed but dependencies missing."
+        echo "Please try running as a regular user (not sudo)."
         echo
         exit 1
     fi
