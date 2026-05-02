@@ -43,8 +43,20 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
+# Install Playwright browsers (REQUIRED for notebooklm login)
+echo "Installing Playwright browsers (Chromium)..."
+$PYTHON_CMD -m playwright install chromium
+if [[ $? -ne 0 ]]; then
+    echo
+    echo "WARNING: Failed to install Chromium."
+    echo "The login process may fail to open a browser."
+    echo "Try running manually: $PYTHON_CMD -m playwright install chromium"
+    echo
+    read -p "Press ENTER to continue anyway..."
+fi
+
 # Ask user if they want to use system Chrome
-read -p "Use system Chrome instead of downloading Chromium? (y/n): " USE_CHROME
+read -p "Use system Chrome instead of Playwright Chromium? (y/n): " USE_CHROME
 if [[ "$USE_CHROME" =~ ^[Yy]$ ]]; then
     # Try to find Chrome/Chromium
     CHROME_PATH=""
@@ -59,8 +71,14 @@ if [[ "$USE_CHROME" =~ ^[Yy]$ ]]; then
     done
 
     if [[ -n "$CHROME_PATH" ]]; then
-        export NOTEBOOKLM_BROWSER_PATH="$CHROME_PATH"
-        echo "Using system browser: $NOTEBOOKLM_BROWSER_PATH"
+        # Verify the path is valid
+        if [[ -x "$CHROME_PATH" ]]; then
+            export NOTEBOOKLM_BROWSER_PATH="$CHROME_PATH"
+            echo "Using system browser: $NOTEBOOKLM_BROWSER_PATH"
+        else
+            echo "ERROR: Chrome path is not executable: $CHROME_PATH"
+            echo "Proceeding with Playwright's bundled Chromium..."
+        fi
     else
         echo "Chrome not found in PATH. Please enter the full path:"
         read -p "Chrome path (or press ENTER to use Chromium): " MANUAL_PATH

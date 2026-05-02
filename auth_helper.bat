@@ -50,8 +50,22 @@ exit /b 1
 echo Using Python: %PYTHON_CMD%
 echo.
 
+REM Install Playwright browsers (REQUIRED for notebooklm login)
+echo Installing Playwright browsers (Chromium)...
+%PYTHON_CMD% -m playwright install chromium
+if %errorlevel% neq 0 (
+    echo.
+    echo WARNING: Failed to install Chromium.
+    echo The login process may fail to open a browser.
+    echo.
+    echo Try running manually:
+    echo   %PYTHON_CMD% -m playwright install chromium
+    echo.
+    pause
+)
+
 REM Ask user if they want to use system Chrome
-set /p USE_CHROME="Use system Chrome instead of downloading Chromium? (Y/N): "
+set /p USE_CHROME="Use system Chrome instead of Playwright Chromium? (Y/N): "
 if /i "%USE_CHROME%"=="Y" (
     goto :find_chrome
 ) else (
@@ -62,12 +76,12 @@ if /i "%USE_CHROME%"=="Y" (
 REM Try to find Chrome in default locations
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
     set NOTEBOOKLM_BROWSER_PATH=%ProgramFiles%\Google\Chrome\Application\chrome.exe
-    goto :chrome_found
+    goto :verify_chrome
 )
 
 if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
     set NOTEBOOKLM_BROWSER_PATH=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe
-    goto :chrome_found
+    goto :verify_chrome
 )
 
 REM Try to find chrome in PATH
@@ -77,7 +91,7 @@ del %temp%\chrome_path.txt >nul 2>&1
 
 if exist "%CHROME_PATH%" (
     set NOTEBOOKLM_BROWSER_PATH=%CHROME_PATH%
-    goto :chrome_found
+    goto :verify_chrome
 )
 
 echo.
@@ -87,13 +101,19 @@ set /p MANUAL_PATH="Chrome path (or ENTER to skip): "
 if not "%MANUAL_PATH%"=="" (
     if exist "%MANUAL_PATH%" (
         set NOTEBOOKLM_BROWSER_PATH=%MANUAL_PATH%
-        goto :chrome_found
+        goto :verify_chrome
     )
 )
 echo Proceeding with Playwright's bundled Chromium...
 goto :do_login
 
-:chrome_found
+:verify_chrome
+REM Verify the Chrome path is valid
+if not exist "%NOTEBOOKLM_BROWSER_PATH%" (
+    echo ERROR: Chrome path is invalid: %NOTEBOOKLM_BROWSER_PATH%
+    echo Proceeding with Playwright's bundled Chromium...
+    goto :do_login
+)
 echo Using system Chrome: %NOTEBOOKLM_BROWSER_PATH%
 echo.
 

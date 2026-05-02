@@ -22,42 +22,38 @@ import re
 import asyncio
 import traceback
 
-# Cross-platform auth path handling - check multiple paths in priority order
+# Cross-platform auth path handling
+if os.environ.get("FLATPAK_ID"):
+    # Flatpak environment
+    _NOTEBOOKLM_DIR = Path("/var/data/.notebooklm")
+else:
+    # Standard environment (Linux, Windows, Mac)
+    _NOTEBOOKLM_DIR = Path.home() / ".notebooklm"
+
+# ALWAYS define _NotebookLM_AUTH_PATH (fixes NameError)
+_NotebookLM_AUTH_PATH = str(_NOTEBOOKLM_DIR / "storage_state.json")
+os.environ.setdefault("NOTEBOOKLM_HOME", str(_NOTEBOOKLM_DIR))
+
+
 def _get_auth_paths():
-    """Get list of possible storage_state.json paths in priority order."""
+    """Get list of possible storage_state.json paths for reading credentials."""
     paths = []
 
-    if os.environ.get("FLATPAK_ID"):
-        # Flatpak: check multiple locations
-        paths.append(Path("/var/data/.notebooklm/storage_state.json"))
-        paths.append(Path.home() / ".notebooklm" / "storage_state.json")
-    else:
-        # Standard: check NOTEBOOKLM_HOME, then default
-        if os.environ.get("NOTEBOOKLM_HOME"):
-            paths.append(Path(os.environ["NOTEBOOKLM_HOME"]) / "storage_state.json")
-        paths.append(Path.home() / ".notebooklm" / "storage_state.json")
+    # Add the primary path first
+    paths.append(Path(_NotebookLM_AUTH_PATH))
 
-    # Also check addon's own directory (for portable installs)
+    # Add fallback paths
+    if os.environ.get("FLATPAK_ID"):
+        flatpak_home = Path.home() / ".notebooklm" / "storage_state.json"
+        if flatpak_home != Path(_NotebookLM_AUTH_PATH):
+            paths.append(flatpak_home)
+
+    # Add addon directory path (portable installs)
     addon_dir = Path(__file__).parent
     paths.append(addon_dir / "storage_state.json")
 
     # Return only paths that exist
     return [p for p in paths if p.exists()]
-
-
-# Use the first valid path
-_auth_paths = _get_auth_paths()
-if _auth_paths:
-    _NotebookLM_AUTH_PATH = str(_auth_paths[0])
-    # Set NOTEBOOKLM_HOME based on found path
-    os.environ.setdefault("NOTEBOOKLM_HOME", str(_auth_paths[0].parent))
-else:
-    # No credentials found - use default path for error messages
-    if os.environ.get("FLATPAK_ID"):
-        _NOTEBOOKLM_AUTH_PATH = "/var/data/.notebooklm/storage_state.json"
-    else:
-        _NOTEBOOKLM_AUTH_PATH = str(Path.home() / ".notebooklm" / "storage_state.json")
-    os.environ.setdefault("NOTEBOOKLM_HOME", str(Path(_NotebookLM_AUTH_PATH).parent))
 
 _notebooklm_import_error = None
 try:
@@ -120,9 +116,9 @@ def upload_pdf(pdf_path: str, topic: str) -> str:
             f"Details:\n{detail}"
         )
 
-    # Check if credentials exist
-    import os
-    if not os.path.exists(_NotebookLM_AUTH_PATH):
+    # Check if credentials exist (try multiple paths)
+    auth_paths = _get_auth_paths()
+    if not auth_paths:
         raise RuntimeError(
             "NotebookLM authentication required!\n\n"
             "Credentials not found. Please run the authentication helper:\n"
@@ -134,21 +130,32 @@ def upload_pdf(pdf_path: str, topic: str) -> str:
 
     def _do_upload():
         async def _upload():
-            try:
-                async with await NotebookLMClient.from_storage(path=_NotebookLM_AUTH_PATH) as client:
-                    nb = await client.notebooks.create(topic)
-                    await client.sources.add_file(nb.id, Path(pdf_path), wait=True)
-                    return nb.id
-            except Exception as e:
-                if "auth" in str(e).lower() or "login" in str(e).lower() or "cookie" in str(e).lower():
-                    raise RuntimeError(
-                        "NotebookLM authentication failed!\n\n"
-                        "Your credentials may be expired. Please re-run:\n"
-                        "- Windows: auth_helper.bat\n"
-                        "- Linux/macOS: ./auth_helper.sh\n\n"
-                        f"Error: {e}"
-                    ) from e
-                raise
+            # Try each valid auth path
+            last_error = None
+            for auth_path in auth_paths:
+                try:
+                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                        nb = await client.notebooks.create(topic)
+                        await client.sources.add_file(nb.id, Path(pdf_path), wait=True)
+                        return nb.id
+                except Exception as e:
+                    last_error = e
+                    if "auth" in str(e).lower() or "login" in str(e).lower() or "cookie" in str(e).lower():
+                        continue  # Try next path
+                    raise
+
+            # All paths failed
+            if last_error and ("auth" in str(last_error).lower() or "login" in str(last_error).lower() or "cookie" in str(last_error).lower()):
+                raise RuntimeError(
+                    "NotebookLM authentication failed!\n\n"
+                    "Your credentials may be expired. Please re-run:\n"
+                    "- Windows: auth_helper.bat\n"
+                    "- Linux/macOS: ./auth_helper.sh\n\n"
+                    f"Error: {last_error}"
+                ) from last_error
+            if last_error:
+                raise last_error
+            raise RuntimeError("Authentication failed for unknown reason.")
 
         return _run_async(_upload())
 
@@ -182,9 +189,9 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
     if not _active_notebook_id:
         raise RuntimeError("No active notebook. Call upload_pdf() first.")
 
-    # Check if credentials exist
-    import os
-    if not os.path.exists(_NotebookLM_AUTH_PATH):
+    # Check if credentials exist (try multiple paths)
+    auth_paths = _get_auth_paths()
+    if not auth_paths:
         raise RuntimeError(
             "NotebookLM authentication required!\n\n"
             "Credentials not found. Please run the authentication helper:\n"
@@ -197,20 +204,31 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
 
     def _do_generate():
         async def _generate():
-            try:
-                async with await NotebookLMClient.from_storage(path=_NotebookLM_AUTH_PATH) as client:
-                    result = await client.chat.ask(notebook_id, prompt)
-                    return result.answer
-            except Exception as e:
-                if "auth" in str(e).lower() or "login" in str(e).lower() or "cookie" in str(e).lower():
-                    raise RuntimeError(
-                        "NotebookLM authentication failed!\n\n"
-                        "Your credentials may be expired. Please re-run:\n"
-                        "- Windows: auth_helper.bat\n"
-                        "- Linux/macOS: ./auth_helper.sh\n\n"
-                        f"Error: {e}"
-                    ) from e
-                raise
+            # Try each valid auth path
+            last_error = None
+            for auth_path in auth_paths:
+                try:
+                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                        result = await client.chat.ask(notebook_id, prompt)
+                        return result.answer
+                except Exception as e:
+                    last_error = e
+                    if "auth" in str(e).lower() or "login" in str(e).lower() or "cookie" in str(e).lower():
+                        continue  # Try next path
+                    raise
+
+            # All paths failed
+            if last_error and ("auth" in str(last_error).lower() or "login" in str(last_error).lower() or "cookie" in str(last_error).lower()):
+                raise RuntimeError(
+                    "NotebookLM authentication failed!\n\n"
+                    "Your credentials may be expired. Please re-run:\n"
+                    "- Windows: auth_helper.bat\n"
+                    "- Linux/macOS: ./auth_helper.sh\n\n"
+                    f"Error: {last_error}"
+                ) from last_error
+            if last_error:
+                raise last_error
+            raise RuntimeError("Authentication failed for unknown reason.")
 
         answer = _run_async(_generate())
         return _extract_json(answer)
@@ -232,8 +250,15 @@ def delete_notebook() -> None:
 
     def _do_delete():
         async def _delete():
-            async with await NotebookLMClient.from_storage(path=_NotebookLM_AUTH_PATH) as client:
-                await client.notebooks.delete(notebook_id)
+            # Try each valid auth path
+            auth_paths = _get_auth_paths()
+            for auth_path in (auth_paths if auth_paths else [Path(_NotebookLM_AUTH_PATH)]):
+                try:
+                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                        await client.notebooks.delete(notebook_id)
+                        return
+                except Exception:
+                    continue  # Try next path
 
         _run_async(_delete())
 
