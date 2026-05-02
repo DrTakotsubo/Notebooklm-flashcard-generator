@@ -51,14 +51,18 @@ exit /b 1
 echo Using Python: %PYTHON_CMD%
 echo.
 
-REM Check if playwright is available
-%PYTHON_CMD% -c "import playwright" >nul 2>&1
+REM Check if playwright is available (with PYTHONPATH set)
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Playwright not found. Installing to addon directory...
-    %PYTHON_CMD% -m pip install playwright --target="%ADDON_DIR%\libs"
+    echo This may take a few minutes...
+    echo.
+    
+    REM Install playwright with all dependencies
+    %PYTHON_CMD% -m pip install playwright pyee greenlet typing-extensions --target="%ADDON_DIR%\libs"
     if %errorlevel% neq 0 (
         echo.
-        echo ERROR: Failed to install Playwright.
+        echo ERROR: Failed to install Playwright and dependencies.
         echo.
         echo Possible causes:
         echo 1. No internet connection
@@ -68,11 +72,24 @@ if %errorlevel% neq 0 (
         echo Solutions:
         echo 1. Run this script as a REGULAR user (not administrator)
         echo 2. Temporarily disable firewall/antivirus
+        echo 3. Try manual install: pip install playwright
         echo.
         pause
         exit /b 1
     )
-    echo Playwright installed successfully.
+    
+    REM Verify installation
+    %PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('Verification OK')" >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo.
+        echo ERROR: Playwright installed but dependencies missing.
+        echo Please try running as a regular user (not administrator).
+        echo.
+        pause
+        exit /b 1
+    )
+    
+    echo Playwright and dependencies installed successfully.
     echo.
 )
 

@@ -43,13 +43,17 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
-# Check if playwright Python package is available
-if ! $PYTHON_CMD -c "import playwright" &> /dev/null; then
+# Check if playwright Python package is available (with PYTHONPATH set)
+if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" &> /dev/null; then
     echo "Playwright not found. Installing to addon directory..."
-    $PYTHON_CMD -m pip install playwright --target="$SCRIPT_DIR/libs"
+    echo "This may take a few minutes..."
+    echo
+    
+    # Install playwright with all dependencies
+    $PYTHON_CMD -m pip install playwright pyee greenlet typing-extensions --target="$SCRIPT_DIR/libs"
     if [[ $? -ne 0 ]]; then
         echo
-        echo "ERROR: Failed to install Playwright."
+        echo "ERROR: Failed to install Playwright and dependencies."
         echo
         echo "Possible causes:"
         echo "1. No internet connection"
@@ -62,7 +66,17 @@ if ! $PYTHON_CMD -c "import playwright" &> /dev/null; then
         echo
         exit 1
     fi
-    echo "Playwright installed successfully."
+    
+    # Verify installation
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo
+        echo "ERROR: Playwright installed but dependencies missing."
+        echo "Please try running as a regular user (not sudo)."
+        echo
+        exit 1
+    fi
+    
+    echo "Playwright and dependencies installed successfully."
 fi
 
 # Browser selection menu
