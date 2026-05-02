@@ -3,7 +3,7 @@
 # build.sh - Build script for NotebookLM Flashcard Generator addon
 # =============================================================================
 # This script:
-# 1. Installs Python dependencies to libs/ (including playwright)
+# 1. Installs Python dependencies to libs/ (NOT playwright - users install it themselves)
 # 2. Optionally downloads Playwright browsers to browsers/ folder
 # 3. Creates the .ankiaddon package
 # 4. Cleans up unnecessary files
@@ -26,14 +26,14 @@ echo
 # Create libs directory if it doesn't exist
 mkdir -p libs
 
-# Install required packages
+# Install required packages (NOTE: playwright is NOT bundled - users install it themselves)
 pip install notebooklm-py --target=libs/ --no-deps --quiet 2>/dev/null || true
-pip install playwright --target=libs/ --no-deps --quiet 2>/dev/null || true
+pip install httpx click rich markdown-it-py pygments --target=libs/ --quiet 2>/dev/null || true
 
-# Install all dependencies with deps
-pip install notebooklm-py playwright --target=libs/ --quiet
+# Install all dependencies
+pip install notebooklm-py --target=libs/ --quiet
 
-echo "Dependencies installed."
+echo "Dependencies installed (playwright NOT bundled - users install it themselves)."
 echo
 
 # Step 2: Ask if user wants to bundle Chromium browser
@@ -98,6 +98,10 @@ echo "Build complete!"
 echo "=============================================="
 echo
 echo "Output: $OUTPUT_FILE"
+echo
+echo "Note: Playwright is NOT bundled. Users will need to:"
+echo "  1. Run auth_helper.sh (it will install playwright automatically)"
+echo "  2. Or manually: pip install playwright && playwright install chromium"
 echo
 echo "Next steps:"
 echo "1. Test the addon by installing it in Anki"

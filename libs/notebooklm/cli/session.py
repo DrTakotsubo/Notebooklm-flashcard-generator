@@ -13,7 +13,6 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -197,13 +196,12 @@ def register_session_commands(cli):
         _ensure_chromium_installed()
 
         storage_path = Path(storage) if storage else get_storage_path()
-        # Use temporary directory for browser profile to avoid conflicts with existing sessions
-        browser_profile = tempfile.mkdtemp(prefix="notebooklm_auth_")
+        browser_profile = get_browser_profile_dir()
         storage_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.makedirs(browser_profile, exist_ok=True)
+        browser_profile.mkdir(parents=True, exist_ok=True, mode=0o700)
 
         console.print("[yellow]Opening browser for Google login...[/yellow]")
-        console.print(f"[dim]Using temporary profile: {browser_profile}[/dim]")
+        console.print(f"[dim]Using persistent profile: {browser_profile}[/dim]")
         console.print("[dim]Browser will open in incognito/private mode[/dim]")
 
         # Use context manager to restore ProactorEventLoop for Playwright on Windows

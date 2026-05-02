@@ -14,29 +14,23 @@ set "PYTHONPATH=%ADDON_DIR%\libs"
 echo Setting PYTHONPATH to: %PYTHONPATH%
 echo.
 
-REM Debug information (uncomment for troubleshooting)
-REM echo Debug info:
-REM echo Current directory: %CD%
-REM echo PYTHONPATH: %PYTHONPATH%
-REM %PYTHON_CMD% --version 2>&1
-
 REM Try multiple Python commands
 python --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=python
-    goto :ask_browser
+    goto :check_playwright
 )
 
 py --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=py
-    goto :ask_browser
+    goto :check_playwright
 )
 
 python3 --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=python3
-    goto :ask_browser
+    goto :check_playwright
 )
 
 echo.
@@ -53,10 +47,36 @@ echo ==============================================
 pause
 exit /b 1
 
-:ask_browser
+:check_playwright
 echo Using Python: %PYTHON_CMD%
 echo.
 
+REM Check if playwright is available
+%PYTHON_CMD% -c "import playwright" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Playwright not found. Installing to addon directory...
+    %PYTHON_CMD% -m pip install playwright --target="%ADDON_DIR%\libs"
+    if %errorlevel% neq 0 (
+        echo.
+        echo ERROR: Failed to install Playwright.
+        echo.
+        echo Possible causes:
+        echo 1. No internet connection
+        echo 2. Firewall blocking pip
+        echo 3. Running as administrator with restricted network access
+        echo.
+        echo Solutions:
+        echo 1. Run this script as a REGULAR user (not administrator)
+        echo 2. Temporarily disable firewall/antivirus
+        echo.
+        pause
+        exit /b 1
+    )
+    echo Playwright installed successfully.
+    echo.
+)
+
+:ask_browser
 echo ==============================================
 echo Browser Selection
 echo ==============================================
@@ -108,7 +128,7 @@ if not "%CHROME_PATH%"=="" (
 
 REM Try python to find chrome
 %PYTHON_CMD% -c "import shutil; p=shutil.which('chrome'); print(p or '')" > "%temp%\chrome_path.txt" 2>nul
-set /p CHROME_PATH=<"%temp%\chrome_path.txt"
+set /p CHROME_PATH=<%temp%\chrome_path.txt
 del "%temp%\chrome_path.txt" >nul 2>&1
 
 if exist "%CHROME_PATH%" (
@@ -139,15 +159,6 @@ if not exist "%NOTEBOOKLM_BROWSER_PATH%" (
     goto :install_chromium
 )
 echo Using system Chrome: %NOTEBOOKLM_BROWSER_PATH%
-echo.
-
-REM Set PLAYWRIGHT_BROWSERS_PATH for bundled browsers (if any)
-set "PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers"
-if exist "%PLAYWRIGHT_BROWSERS_PATH%" (
-    echo Found bundled browsers at: %PLAYWRIGHT_BROWSERS_PATH%
-) else (
-    echo No bundled browsers found. Will use system Chrome.
-)
 echo.
 goto :do_login
 
