@@ -43,59 +43,76 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
-# Check if playwright is already installed (PYTHONPATH is already set)
-if $PYTHON_CMD -c "import playwright" &> /dev/null; then
-    echo "Playwright already installed."
-    echo
-    goto :ask_browser
+# Check if playwright is already installed in bundled libs
+PLAYWRIGHT_INSTALLED=false
+if $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" &> /dev/null; then
+    echo "Playwright already installed in bundled libs."
+    PLAYWRIGHT_INSTALLED=true
+    
+    # Verify it actually works
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo "Bundled Playwright verification failed. Reinstalling..."
+        PLAYWRIGHT_INSTALLED=false
+    else
+        echo "Bundled Playwright verified."
+    fi
 fi
 
-echo "Playwright not found. Installing now..."
-echo "This may take a few minutes..."
-echo
+if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
+    echo "Playwright not found. Installing now..."
+    echo "This may take a few minutes..."
+    echo
 
-# Clear pip cache first (fixes deserialization errors)
-$PYTHON_CMD -m pip cache purge &> /dev/null || true
+    # Clear pip cache first (fixes deserialization errors)
+    $PYTHON_CMD -m pip cache purge &> /dev/null || true
 
-# Install playwright with all dependencies
-$PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" playwright pyee greenlet typing-extensions
+    # Create libs directory if it doesn't exist
+    mkdir -p "$SCRIPT_DIR/libs"
 
-if [[ $? -ne 0 ]]; then
+    # Install playwright with all dependencies
+    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" playwright pyee greenlet typing-extensions
+
+    if [[ $? -ne 0 ]]; then
+        echo
+        echo "ERROR: Failed to install Playwright and dependencies."
+        echo
+        echo "Possible causes:"
+        echo "1. No internet connection"
+        echo "2. Firewall blocking pip"
+        echo
+        echo "Solutions:"
+        echo "1. Check your internet connection"
+        echo "2. Temporarily disable firewall/antivirus"
+        echo "3. Try running as a regular user (not sudo)"
+        echo
+        exit 1
+    fi
+
     echo
-    echo "ERROR: Failed to install Playwright and dependencies."
+    echo "Verifying installation..."
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo
+        echo "ERROR: Installation verification failed."
+        echo "Playwright was installed but cannot be imported."
+        echo
+        echo "Debug information:"
+        echo "PYTHONPATH: $PYTHONPATH"
+        echo
+        echo "Please try:"
+        echo "1. Close and reopen your terminal"
+        echo "2. Run as a regular user (not sudo)"
+        echo "3. Manually run: $PYTHON_CMD -c 'import playwright'"
+        echo
+        exit 1
+    fi
+
+    echo "Playwright and dependencies installed successfully."
     echo
-    echo "Possible causes:"
-    echo "1. No internet connection"
-    echo "2. Firewall blocking pip"
-    echo
-    echo "Solutions:"
-    echo "1. Check your internet connection"
-    echo "2. Temporarily disable firewall/antivirus"
-    echo "3. Try running as a regular user (not sudo)"
-    echo
-    exit 1
 fi
 
-echo
-echo "Verifying installation..."
-if ! $PYTHON_CMD -c "import playwright; import pyee; import greenlet" &> /dev/null; then
+    echo "Playwright and dependencies installed successfully."
     echo
-    echo "ERROR: Installation verification failed."
-    echo "Playwright was installed but cannot be imported."
-    echo
-    echo "Debug information:"
-    echo "PYTHONPATH: $PYTHONPATH"
-    echo
-    echo "Please try:"
-    echo "1. Close and reopen your terminal"
-    echo "2. Run as a regular user (not sudo)"
-    echo "3. Manually run: $PYTHON_CMD -c 'import playwright'"
-    echo
-    exit 1
 fi
-
-echo "Playwright and dependencies installed successfully."
-echo
 
 # Browser selection menu
 echo
@@ -135,6 +152,10 @@ if [[ "$BROWSER_CHOICE" == "1" ]]; then
             export NOTEBOOKLM_BROWSER_PATH="$CHROME_PATH"
             echo
             echo "Using system browser: $NOTEBOOKLM_BROWSER_PATH"
+            
+            # Save browser config
+            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$SCRIPT_DIR/browser_config.ini"
+            echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
         else
             echo
             echo "ERROR: Chrome path is not executable: $CHROME_PATH"
@@ -149,6 +170,9 @@ if [[ "$BROWSER_CHOICE" == "1" ]]; then
             export NOTEBOOKLM_BROWSER_PATH="$MANUAL_PATH"
             echo
             echo "Using: $NOTEBOOKLM_BROWSER_PATH"
+            # Save browser config
+            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$SCRIPT_DIR/browser_config.ini"
+            echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
         else
             echo
             echo "Falling back to Playwright Chromium..."
@@ -163,12 +187,12 @@ if [[ "$BROWSER_CHOICE" == "2" ]]; then
     echo "Installing Playwright browsers (Chromium)..."
     echo "This may take a few minutes and requires internet connection."
     echo
-    
+
     # Set PLAYWRIGHT_BROWSERS_PATH to bundle browsers in addon directory
     export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
     mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
-    
-    $PYTHON_CMD -m playwright install chromium
+
+    $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" -m playwright install chromium
     if [[ $? -ne 0 ]]; then
         echo
         echo "ERROR: Failed to install Chromium."
@@ -185,6 +209,10 @@ if [[ "$BROWSER_CHOICE" == "2" ]]; then
         exit 1
     fi
     echo "Chromium installed successfully to: $PLAYWRIGHT_BROWSERS_PATH"
+    
+    # Save browser config
+    echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" > "$SCRIPT_DIR/browser_config.ini"
+    echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
 fi
 
 echo
@@ -206,8 +234,22 @@ echo
 echo "Running authentication..."
 echo
 
+# Set environment for notebooklm login
+export PYTHONPATH="$SCRIPT_DIR/libs"
+
+# Load browser config if exists
+if [[ -f "$SCRIPT_DIR/browser_config.ini" ]]; then
+    source "$SCRIPT_DIR/browser_config.ini"
+    echo "Loaded browser configuration from: $SCRIPT_DIR/browser_config.ini"
+fi
+
+# Set browser path if using chromium
+if [[ -d "$SCRIPT_DIR/browsers" ]]; then
+    export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
+fi
+
 # Run login
-$PYTHON_CMD -m notebooklm login
+$PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs')" -m notebooklm login
 
 # Verify credentials
 STORAGE_PATH="$HOME/.notebooklm/storage_state.json"
@@ -217,6 +259,15 @@ if [[ -f "$STORAGE_PATH" ]]; then
     echo "SUCCESS: Credentials saved!"
     echo "Location: $STORAGE_PATH"
     echo
+
+    # Copy credentials to addon directory for portability
+    cp "$STORAGE_PATH" "$SCRIPT_DIR/storage_state.json" 2>/dev/null || true
+    if [[ -f "$SCRIPT_DIR/storage_state.json" ]]; then
+        echo "Credentials also copied to addon directory for portability:"
+        echo "$SCRIPT_DIR/storage_state.json"
+        echo
+    fi
+
     echo "You can now use the addon in Anki."
     echo "=============================================="
 

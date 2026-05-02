@@ -53,13 +53,14 @@ echo.
 
 :check_playwright
 echo Checking if Playwright is installed...
-%PYTHON_CMD% -c "import playwright" >nul 2>&1
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright" >nul 2>&1
 
 if %errorlevel%==0 (
     echo Playwright already installed.
-    goto :ask_browser
+    goto :verify_playwright_libs
 )
 
+:install_playwright
 echo Playwright not found. Installing now...
 echo This may take a few minutes...
 echo.
@@ -91,7 +92,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Verifying installation...
-%PYTHON_CMD% -c "import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
 
 if %errorlevel% neq 0 (
     echo.
@@ -113,6 +114,17 @@ if %errorlevel% neq 0 (
 
 echo Playwright and dependencies installed successfully.
 echo.
+goto :ask_browser
+
+:verify_playwright_libs
+echo Verifying bundled Playwright works...
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Bundled Playwright verification failed. Reinstalling...
+    goto :install_playwright
+)
+echo Bundled Playwright verified.
+goto :ask_browser
 
 :ask_browser
 echo ==============================================
@@ -188,6 +200,14 @@ if not exist "%NOTEBOOKLM_BROWSER_PATH%" (
 )
 echo Using system Chrome: %NOTEBOOKLM_BROWSER_PATH%
 echo.
+
+REM Save browser path to config file for addon
+echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH% > "%ADDON_DIR%\browser_config.ini"
+echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
+echo.
+
+REM Set environment variable for this session
+set NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
 goto :do_login
 
 :install_chromium
@@ -195,6 +215,8 @@ echo.
 echo Installing Playwright Chromium browser...
 echo This may take a few minutes and requires internet connection.
 echo.
+set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
+if not exist "%ADDON_DIR%\browsers" mkdir "%ADDON_DIR%\browsers"
 %PYTHON_CMD% -m playwright install chromium
 if %errorlevel% neq 0 (
     echo.
@@ -215,6 +237,12 @@ if %errorlevel% neq 0 (
 )
 echo Chromium installed successfully.
 echo.
+
+REM Save browser config for addon
+echo PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers > "%ADDON_DIR%\browser_config.ini"
+echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
+echo.
+
 goto :do_login
 
 :do_login
@@ -236,6 +264,22 @@ echo.
 echo Running authentication...
 echo.
 
+REM Set environment for notebooklm login
+set PYTHONPATH=%ADDON_DIR%\libs
+
+REM Load browser config if exists
+if exist "%ADDON_DIR%\browser_config.ini" (
+    for /f "usebackq tokens=1,* delims==" %%a in ("%ADDON_DIR%\browser_config.ini") do (
+        if "%%a"=="NOTEBOOKLM_BROWSER_PATH" set NOTEBOOKLM_BROWSER_PATH=%%b
+        if "%%a"=="PLAYWRIGHT_BROWSERS_PATH" set PLAYWRIGHT_BROWSERS_PATH=%%b
+    )
+)
+
+REM Set browser path if using chromium
+if exist "%ADDON_DIR%\browsers" (
+    set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
+)
+
 REM Run login
 %PYTHON_CMD% -m notebooklm login
 
@@ -247,6 +291,15 @@ if exist "%STORAGE_PATH%" (
     echo SUCCESS: Credentials saved!
     echo Location: %STORAGE_PATH%
     echo.
+
+    REM Also copy credentials to addon directory for portability
+    copy /Y "%STORAGE_PATH%" "%ADDON_DIR%\storage_state.json" >nul 2>&1
+    if exist "%ADDON_DIR%\storage_state.json" (
+        echo Credentials also copied to addon directory for portability:
+        echo %ADDON_DIR%\storage_state.json
+        echo.
+    )
+
     echo You can now use the addon in Anki.
     echo ==============================================
 ) else (

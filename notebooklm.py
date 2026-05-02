@@ -34,15 +34,58 @@ else:
 _NotebookLM_AUTH_PATH = str(_NOTEBOOKLM_DIR / "storage_state.json")
 os.environ.setdefault("NOTEBOOKLM_HOME", str(_NOTEBOOKLM_DIR))
 
+# Also set NOTEBOOKLM_AUTH_JSON from storage file if it exists (for notebooklm-py)
+_storage_file = Path(_NotebookLM_AUTH_PATH)
+if _storage_file.exists():
+    try:
+        with open(_storage_file, 'r') as f:
+            storage_data = json.load(f)
+            os.environ["NOTEBOOKLM_AUTH_JSON"] = json.dumps(storage_data)
+    except Exception:
+        pass  # If we can't read it, continue without setting the env var
+
+# Read browser config from addon directory (created by auth_helper)
+_browser_config_path = _ADDON_DIR / "browser_config.ini"
+if _browser_config_path.exists():
+    try:
+        with open(_browser_config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    if key == "NOTEBOOKLM_BROWSER_PATH":
+                        os.environ["NOTEBOOKLM_BROWSER_PATH"] = value
+                    elif key == "PLAYWRIGHT_BROWSERS_PATH":
+                        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = value
+    except Exception:
+        pass  # If we can't read it, continue without browser config
+
 
 def _get_auth_paths():
     """Get list of possible storage_state.json paths for reading credentials."""
     paths = []
 
-    # Add the primary path first
+    # Add the primary path first (user's home directory)
     paths.append(Path(_NotebookLM_AUTH_PATH))
 
-    # Add fallback paths
+    # Windows-specific fallback paths
+    import platform
+    if platform.system() == "Windows":
+        # Check APPDATA (common for portable apps on Windows)
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            appdata_path = Path(appdata) / "notebooklm" / "storage_state.json"
+            if appdata_path not in paths:
+                paths.append(appdata_path)
+
+        # Check LOCALAPPDATA
+        localappdata = os.environ.get("LOCALAPPDATA")
+        if localappdata:
+            localappdata_path = Path(localappdata) / "notebooklm" / "storage_state.json"
+            if localappdata_path not in paths:
+                paths.append(localappdata_path)
+
+    # Flatpak fallback
     if os.environ.get("FLATPAK_ID"):
         flatpak_home = Path.home() / ".notebooklm" / "storage_state.json"
         if flatpak_home != Path(_NotebookLM_AUTH_PATH):
@@ -52,8 +95,17 @@ def _get_auth_paths():
     addon_dir = Path(__file__).parent
     paths.append(addon_dir / "storage_state.json")
 
+    # Check if NOTEBOOKLM_HOME is set explicitly
+    explicit_home = os.environ.get("NOTEBOOKLM_HOME")
+    if explicit_home:
+        explicit_path = Path(explicit_home) / "storage_state.json"
+        if explicit_path not in paths:
+            paths.append(explicit_path)
+
     # Return only paths that exist
-    return [p for p in paths if p.exists()]
+    existing = [p for p in paths if p.exists()]
+    
+    return existing
 
 _notebooklm_import_error = None
 try:
@@ -65,15 +117,34 @@ except Exception as e:
 # Module-level state to persist notebook_id between function calls
 _active_notebook_id: str | None = None
 
+# Store event loops to prevent leaks
+_event_loop: asyncio.AbstractEventLoop | None = None
+
 
 def _run_async(coro):
     """Run an async coroutine in a new event loop (safe for worker threads)."""
+    global _event_loop
     try:
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+    _event_loop = loop
     return loop.run_until_complete(coro)
+
+
+def _cleanup_event_loop():
+    """Clean up the event loop when done (called at module shutdown)."""
+    global _event_loop
+    if _event_loop is not None and not _event_loop.is_closed():
+        try:
+            _event_loop.close()
+        except Exception:
+            pass
+        _event_loop = None
 
 
 def _extract_json(text: str) -> list[dict]:
@@ -90,7 +161,7 @@ def _extract_json(text: str) -> list[dict]:
 
     raise ValueError(
         "Could not extract valid JSON flashcards from NotebookLM response.\n\n"
-        f"Raw response (first 500 chars):\n{text[:500]}"
+        f"Raw response (first 1000 chars):\n{text[:1000]}"
     )
 
 
@@ -119,13 +190,35 @@ def upload_pdf(pdf_path: str, topic: str) -> str:
     # Check if credentials exist (try multiple paths)
     auth_paths = _get_auth_paths()
     if not auth_paths:
+        import platform
+        paths_checked = [
+            str(Path.home() / ".notebooklm" / "storage_state.json"),
+        ]
+        
+        if platform.system() == "Windows":
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                paths_checked.append(str(Path(appdata) / "notebooklm" / "storage_state.json"))
+            localappdata = os.environ.get("LOCALAPPDATA")
+            if localappdata:
+                paths_checked.append(str(Path(localappdata) / "notebooklm" / "storage_state.json"))
+        
+        # Add addon directory and NOTEBOOKLM_HOME
+        paths_checked.append(str(Path(__file__).parent / "storage_state.json"))
+        
+        explicit_home = os.environ.get("NOTEBOOKLM_HOME")
+        if explicit_home:
+            paths_checked.append(str(Path(explicit_home) / "storage_state.json"))
+        
+        paths_str = "\n  - ".join(paths_checked)
+        
         raise RuntimeError(
             "NotebookLM authentication required!\n\n"
             "Credentials not found. Please run the authentication helper:\n"
-            f"- Windows: Run auth_helper.bat as administrator\n"
-            f"- Linux/macOS: Run ./auth_helper.sh\n\n"
-            f"Looking for: {_NotebookLM_AUTH_PATH}\n"
-            f"Make sure to log in using the Playwright browser window (not your default browser)."
+            "- Windows: Double-click auth_helper.bat (do NOT run as administrator)\n"
+            "- Linux/macOS: Run ./auth_helper.sh\n\n"
+            f"Checked paths:\n  - {paths_str}\n\n"
+            "Make sure to log in using the Playwright browser window (not your default browser)."
         )
 
     def _do_upload():
@@ -149,7 +242,7 @@ def upload_pdf(pdf_path: str, topic: str) -> str:
                 raise RuntimeError(
                     "NotebookLM authentication failed!\n\n"
                     "Your credentials may be expired. Please re-run:\n"
-                    "- Windows: auth_helper.bat\n"
+                    "- Windows: auth_helper.bat (do NOT run as administrator)\n"
                     "- Linux/macOS: ./auth_helper.sh\n\n"
                     f"Error: {last_error}"
                 ) from last_error
@@ -195,7 +288,7 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
         raise RuntimeError(
             "NotebookLM authentication required!\n\n"
             "Credentials not found. Please run the authentication helper:\n"
-            f"- Windows: Run auth_helper.bat as administrator\n"
+            f"- Windows: Double-click auth_helper.bat (do NOT run as administrator)\n"
             f"- Linux/macOS: Run ./auth_helper.sh\n\n"
             f"Looking for: {_NotebookLM_AUTH_PATH}"
         )
@@ -222,7 +315,7 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
                 raise RuntimeError(
                     "NotebookLM authentication failed!\n\n"
                     "Your credentials may be expired. Please re-run:\n"
-                    "- Windows: auth_helper.bat\n"
+                    "- Windows: auth_helper.bat (do NOT run as administrator)\n"
                     "- Linux/macOS: ./auth_helper.sh\n\n"
                     f"Error: {last_error}"
                 ) from last_error
