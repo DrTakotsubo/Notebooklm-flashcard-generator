@@ -51,6 +51,24 @@ if "%PYTHON_CMD%"=="" (
 echo Using Python: %PYTHON_CMD%
 echo.
 
+REM Check internet connectivity
+echo Checking internet connectivity...
+curl -s --connect-timeout 10 https://pypi.org >nul 2>&1
+if %errorlevel% neq 0 (
+    curl -s --connect-timeout 10 https://google.com >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo.
+        echo ERROR: No internet connection detected!
+        echo.
+        echo Please check your internet connection and try again.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+echo Internet connection OK.
+echo.
+
 :check_playwright
 echo Checking if Playwright is installed in bundled libs...
 echo Checking: %ADDON_DIR%\libs
@@ -71,6 +89,9 @@ if exist "%ADDON_DIR%\libs\playwright" (
 )
 
 :install_playwright
+REM Set LIBS_PATH for installation
+for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+
 echo Playwright not found. Installing now...
 echo This may take a few minutes...
 echo.
@@ -85,16 +106,10 @@ if %errorlevel% neq 0 (
     echo.
     echo ERROR: Failed to install Playwright and dependencies.
     echo.
-    echo Possible causes:
-    echo 1. No internet connection
-    echo 2. Firewall blocking pip
-    echo 3. Running as administrator with restricted network access
+    echo This might be a temporary network issue. Please try again.
     echo.
-    echo Solutions:
-    echo 1. Run this script as a REGULAR user (not administrator)
-    echo 2. Temporarily disable firewall/antivirus
-    echo 3. Try manual install in Command Prompt:
-    echo    %PYTHON_CMD% -m pip install playwright
+    echo If the problem persists, try running:
+    echo    %PYTHON_CMD% -m pip install --target="%ADDON_DIR%\libs" playwright
     echo.
     pause
     exit /b 1
@@ -111,24 +126,39 @@ if not exist "%ADDON_DIR%\libs\playwright" (
     pause
     exit /b 1
 )
+echo Playwright folder found in libs.
 
-REM Try to import with proper path handling
+REM Try to import with package cache invalidation (fixes first-run issue)
 for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
 
-if %errorlevel% neq 0 (
+REM First, try to initialize the package cache
+echo Running Python package cache initialization...
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import importlib; importlib.invalidate_caches()" 2>nul
+
+REM Now try the import
+echo Verifying Playwright import...
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright; import pyee; import greenlet; print('OK')" >temp_verify.txt 2>&1
+set VERIFY_RESULT=%errorlevel%
+
+if %VERIFY_RESULT% neq 0 (
+    echo.
+    echo First verification attempt failed. Trying again...
+    REM Try one more time after a brief pause
+    %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import importlib; importlib.invalidate_caches(); import playwright; import pyee; import greenlet; print('OK')" >temp_verify2.txt 2>&1
+    set VERIFY_RESULT=%errorlevel%
+)
+
+type temp_verify.txt 2>nul
+if exist temp_verify.txt del temp_verify.txt 2>nul
+if exist temp_verify2.txt del temp_verify2.txt 2>nul
+
+if %VERIFY_RESULT% neq 0 (
     echo.
     echo ERROR: Installation verification failed.
-    echo Playwright was installed but cannot be imported.
+    echo The packages were installed but Python cannot import them.
     echo.
-    echo Debug information:
-    echo Python command used: %PYTHON_CMD%
-    echo Libs path: %LIBS_PATH%
-    echo.
-    echo Please try:
-    echo 1. Close and reopen Command Prompt
-    echo 2. Run as a REGULAR user (not administrator)
-    echo.
+    echo This sometimes works on the second attempt.
+    echo Please run the script again.
     pause
     exit /b 1
 )
@@ -148,11 +178,11 @@ if not exist "%ADDON_DIR%\libs\playwright" (
     goto :install_playwright
 )
 
-REM Verify imports work
+REM Verify imports work with package cache invalidation
 for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import importlib; importlib.invalidate_caches(); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Bundled Playwright verification failed. Reinstalling...
+    echo Bundled Playwright verification failed. Trying reinstall...
     goto :install_playwright
 )
 echo Bundled Playwright verified.
@@ -249,20 +279,16 @@ echo This may take a few minutes and requires internet connection.
 echo.
 set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
 if not exist "%ADDON_DIR%\browsers" mkdir "%ADDON_DIR%\browsers"
-%PYTHON_CMD% -m playwright install chromium
+
+REM Set LIBS_PATH for Chromium install
+for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright" -m playwright install chromium
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Failed to install Chromium.
     echo.
-    echo Possible causes:
-    echo 1. No internet connection
-    echo 2. Firewall blocking the download
-    echo 3. Running as administrator with restricted network access
-    echo.
-    echo Solutions:
-    echo 1. Run this script as a REGULAR user (not administrator)
-    echo 2. Temporarily disable firewall/antivirus
-    echo 3. Use system Chrome instead (run script again, choose option 1)
+    echo Please check your internet connection and try again.
+    echo Or use system Chrome instead (run script again, choose option 1).
     echo.
     pause
     exit /b 1
@@ -312,8 +338,22 @@ if exist "%ADDON_DIR%\browsers" (
     set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
 )
 
-REM Run login
-%PYTHON_CMD% -m notebooklm login
+REM Add debug output
+echo.
+echo DEBUG INFO:
+echo PYTHONPATH=%PYTHONPATH%
+echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
+echo PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
+echo.
+
+REM Run login with proper environment
+for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+echo Starting NotebookLM authentication...
+echo Using libs path: %LIBS_PATH%
+
+REM Set environment variables for the notebooklm process
+set PYTHONPATH=%ADDON_DIR%\libs
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import os; os.environ['NOTEBOOKLM_BROWSER_PATH']=r'%NOTEBOOKLM_BROWSER_PATH%'; os.environ['PLAYWRIGHT_BROWSERS_PATH']=r'%PLAYWRIGHT_BROWSERS_PATH%'; os.environ['PYTHONPATH']=r'%LIBS_PATH%'; import subprocess; subprocess.run([r'%PYTHON_CMD%', '-m', 'notebooklm', 'login'])"
 
 REM Verify credentials
 set STORAGE_PATH=%USERPROFILE%\.notebooklm\storage_state.json
