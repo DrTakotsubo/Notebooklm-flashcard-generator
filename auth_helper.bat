@@ -4,32 +4,39 @@ echo NotebookLM Flashcard Generator - Auth Helper
 echo ==============================================
 echo.
 
-REM Get the directory where this bat file is located
-cd /d "%~dp0"
+REM Get the directory where this bat file is located (use FOR to handle admin context)
+for %%i in ("%~dp0.") do set "ADDON_DIR=%%~fi"
+cd /d "%ADDON_DIR%"
 
-REM Set PYTHONPATH to use bundled libs
-set PYTHONPATH=%~dp0libs%
+REM Set PYTHONPATH to use bundled libs (use absolute path)
+set "PYTHONPATH=%ADDON_DIR%\libs"
 
 echo Setting PYTHONPATH to: %PYTHONPATH%
 echo.
+
+REM Debug information (uncomment for troubleshooting)
+REM echo Debug info:
+REM echo Current directory: %CD%
+REM echo PYTHONPATH: %PYTHONPATH%
+REM %PYTHON_CMD% --version 2>&1
 
 REM Try multiple Python commands
 python --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=python
-    goto :check_browser
+    goto :ask_browser
 )
 
 py --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=py
-    goto :check_browser
+    goto :ask_browser
 )
 
 python3 --version >nul 2>&1
 if %errorlevel%==0 (
     set PYTHON_CMD=python3
-    goto :check_browser
+    goto :ask_browser
 )
 
 echo.
@@ -46,33 +53,41 @@ echo ==============================================
 pause
 exit /b 1
 
-:check_browser
+:ask_browser
 echo Using Python: %PYTHON_CMD%
 echo.
 
-REM Install Playwright browsers (REQUIRED for notebooklm login)
-echo Installing Playwright browsers (Chromium)...
-%PYTHON_CMD% -m playwright install chromium
-if %errorlevel% neq 0 (
-    echo.
-    echo WARNING: Failed to install Chromium.
-    echo The login process may fail to open a browser.
-    echo.
-    echo Try running manually:
-    echo   %PYTHON_CMD% -m playwright install chromium
-    echo.
-    pause
-)
+echo ==============================================
+echo Browser Selection
+echo ==============================================
+echo.
+echo The authentication requires a browser. Choose one:
+echo.
+echo 1. Use system Chrome (RECOMMENDED - no download needed)
+echo    - Uses your installed Chrome browser
+echo    - Faster, no extra downloads
+echo.
+echo 2. Use Playwright Chromium (requires download ~300MB)
+echo    - Downloads Chromium browser automatically
+echo    - May fail due to network/firewall issues
+echo.
+set /p BROWSER_CHOICE="Enter 1 or 2 (default: 1): "
+if "%BROWSER_CHOICE%"=="" set BROWSER_CHOICE=1
 
-REM Ask user if they want to use system Chrome
-set /p USE_CHROME="Use system Chrome instead of Playwright Chromium? (Y/N): "
-if /i "%USE_CHROME%"=="Y" (
+if "%BROWSER_CHOICE%"=="1" (
     goto :find_chrome
+) else if "%BROWSER_CHOICE%"=="2" (
+    goto :install_chromium
 ) else (
-    goto :do_login
+    echo Invalid choice. Please enter 1 or 2.
+    goto :ask_browser
 )
 
 :find_chrome
+echo.
+echo Looking for system Chrome...
+set NOTEBOOKLM_BROWSER_PATH=
+
 REM Try to find Chrome in default locations
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
     set NOTEBOOKLM_BROWSER_PATH=%ProgramFiles%\Google\Chrome\Application\chrome.exe
@@ -85,37 +100,83 @@ if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
 )
 
 REM Try to find chrome in PATH
-%PYTHON_CMD% -c "import shutil; print(shutil.which('chrome'))" > %temp%\chrome_path.txt 2>nul
-set /p CHROME_PATH=<%temp%\chrome_path.txt
-del %temp%\chrome_path.txt >nul 2>&1
+for %%i in (chrome.exe) do set CHROME_PATH=%%~$PATH:i
+if not "%CHROME_PATH%"=="" (
+    set NOTEBOOKLM_BROWSER_PATH=%CHROME_PATH%
+    goto :verify_chrome
+)
+
+REM Try python to find chrome
+%PYTHON_CMD% -c "import shutil; p=shutil.which('chrome'); print(p or '')" > "%temp%\chrome_path.txt" 2>nul
+set /p CHROME_PATH=<"%temp%\chrome_path.txt"
+del "%temp%\chrome_path.txt" >nul 2>&1
 
 if exist "%CHROME_PATH%" (
     set NOTEBOOKLM_BROWSER_PATH=%CHROME_PATH%
     goto :verify_chrome
 )
 
-echo.
 echo Chrome not found in default locations.
-echo Please enter the full path to chrome.exe manually, or press ENTER to use Chromium.
-set /p MANUAL_PATH="Chrome path (or ENTER to skip): "
+echo.
+set /p MANUAL_PATH="Enter full path to chrome.exe (or press ENTER to try Chromium): "
 if not "%MANUAL_PATH%"=="" (
     if exist "%MANUAL_PATH%" (
         set NOTEBOOKLM_BROWSER_PATH=%MANUAL_PATH%
         goto :verify_chrome
+    ) else (
+        echo Path not found: %MANUAL_PATH%
     )
 )
-echo Proceeding with Playwright's bundled Chromium...
-goto :do_login
+
+echo.
+echo Falling back to Playwright Chromium...
+goto :install_chromium
 
 :verify_chrome
-REM Verify the Chrome path is valid
 if not exist "%NOTEBOOKLM_BROWSER_PATH%" (
     echo ERROR: Chrome path is invalid: %NOTEBOOKLM_BROWSER_PATH%
-    echo Proceeding with Playwright's bundled Chromium...
-    goto :do_login
+    echo Falling back to Playwright Chromium...
+    goto :install_chromium
 )
 echo Using system Chrome: %NOTEBOOKLM_BROWSER_PATH%
 echo.
+
+REM Set PLAYWRIGHT_BROWSERS_PATH for bundled browsers (if any)
+set "PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers"
+if exist "%PLAYWRIGHT_BROWSERS_PATH%" (
+    echo Found bundled browsers at: %PLAYWRIGHT_BROWSERS_PATH%
+) else (
+    echo No bundled browsers found. Will use system Chrome.
+)
+echo.
+goto :do_login
+
+:install_chromium
+echo.
+echo Installing Playwright Chromium browser...
+echo This may take a few minutes and requires internet connection.
+echo.
+%PYTHON_CMD% -m playwright install chromium
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Failed to install Chromium.
+    echo.
+    echo Possible causes:
+    echo 1. No internet connection
+    echo 2. Firewall blocking the download
+    echo 3. Running as administrator with restricted network access
+    echo.
+    echo Solutions:
+    echo 1. Run this script as a REGULAR user (not administrator)
+    echo 2. Temporarily disable firewall/antivirus
+    echo 3. Use system Chrome instead (run script again, choose option 1)
+    echo.
+    pause
+    exit /b 1
+)
+echo Chromium installed successfully.
+echo.
+goto :do_login
 
 :do_login
 echo ==============================================
@@ -157,7 +218,7 @@ if exist "%STORAGE_PATH%" (
     echo Possible issues:
     echo 1. You didn't complete the login in the Playwright browser
     echo 2. Playwright browser failed to open (check errors above)
-    echo 3. Missing Chromium: Run: %PYTHON_CMD% -m playwright install chromium
+    echo 3. You may have logged into the wrong browser window
     echo.
     echo Try running auth_helper.bat again.
     echo ==============================================

@@ -43,21 +43,26 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
-# Install Playwright browsers (REQUIRED for notebooklm login)
-echo "Installing Playwright browsers (Chromium)..."
-$PYTHON_CMD -m playwright install chromium
-if [[ $? -ne 0 ]]; then
-    echo
-    echo "WARNING: Failed to install Chromium."
-    echo "The login process may fail to open a browser."
-    echo "Try running manually: $PYTHON_CMD -m playwright install chromium"
-    echo
-    read -p "Press ENTER to continue anyway..."
-fi
+# Browser selection menu
+echo
+echo "=============================================="
+echo "Browser Selection"
+echo "=============================================="
+echo
+echo "The authentication requires a browser. Choose one:"
+echo
+echo "1. Use system Chrome (RECOMMENDED - no download)"
+echo "   - Uses your installed Chrome browser"
+echo "   - Faster, no extra downloads"
+echo
+echo "2. Use Playwright Chromium (requires download ~300MB)"
+echo "   - Downloads Chromium browser automatically"
+echo "   - May fail due to network/firewall issues"
+echo
+read -p "Enter 1 or 2 (default: 1): " BROWSER_CHOICE
+BROWSER_CHOICE=${BROWSER_CHOICE:-1}
 
-# Ask user if they want to use system Chrome
-read -p "Use system Chrome instead of Playwright Chromium? (y/n): " USE_CHROME
-if [[ "$USE_CHROME" =~ ^[Yy]$ ]]; then
+if [[ "$BROWSER_CHOICE" == "1" ]]; then
     # Try to find Chrome/Chromium
     CHROME_PATH=""
     for browser in google-chrome chromium chromium-browser /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome; do
@@ -74,21 +79,66 @@ if [[ "$USE_CHROME" =~ ^[Yy]$ ]]; then
         # Verify the path is valid
         if [[ -x "$CHROME_PATH" ]]; then
             export NOTEBOOKLM_BROWSER_PATH="$CHROME_PATH"
+            echo
             echo "Using system browser: $NOTEBOOKLM_BROWSER_PATH"
+            
+            # Set PLAYWRIGHT_BROWSERS_PATH for bundled browsers (if any)
+            export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
+            if [[ -d "$PLAYWRIGHT_BROWSERS_PATH" ]]; then
+                echo "Found bundled browsers at: $PLAYWRIGHT_BROWSERS_PATH"
+            else
+                echo "No bundled browsers found. Will use system Chrome."
+            fi
         else
+            echo
             echo "ERROR: Chrome path is not executable: $CHROME_PATH"
-            echo "Proceeding with Playwright's bundled Chromium..."
+            echo "Falling back to Playwright Chromium..."
+            BROWSER_CHOICE="2"
         fi
     else
-        echo "Chrome not found in PATH. Please enter the full path:"
-        read -p "Chrome path (or press ENTER to use Chromium): " MANUAL_PATH
+        echo
+        echo "Chrome not found in PATH."
+        read -p "Enter full path to Chrome (or press ENTER to use Chromium): " MANUAL_PATH
         if [[ -n "$MANUAL_PATH" && -x "$MANUAL_PATH" ]]; then
             export NOTEBOOKLM_BROWSER_PATH="$MANUAL_PATH"
+            echo
             echo "Using: $NOTEBOOKLM_BROWSER_PATH"
         else
-            echo "Proceeding with Playwright's bundled Chromium..."
+            echo
+            echo "Falling back to Playwright Chromium..."
+            BROWSER_CHOICE="2"
         fi
     fi
+fi
+
+if [[ "$BROWSER_CHOICE" == "2" ]]; then
+    # Install Playwright browsers
+    echo
+    echo "Installing Playwright browsers (Chromium)..."
+    echo "This may take a few minutes and requires internet connection."
+    echo
+    
+    # Set PLAYWRIGHT_BROWSERS_PATH to bundle browsers in addon directory
+    export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
+    mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+    
+    $PYTHON_CMD -m playwright install chromium
+    if [[ $? -ne 0 ]]; then
+        echo
+        echo "ERROR: Failed to install Chromium."
+        echo
+        echo "Possible causes:"
+        echo "1. No internet connection"
+        echo "2. Firewall blocking the download"
+        echo
+        echo "Solutions:"
+        echo "1. Check your internet connection"
+        echo "2. Temporarily disable firewall/antivirus"
+        echo "3. Use system Chrome instead (run script again, choose option 1)"
+        echo
+        exit 1
+    fi
+    echo "Chromium installed successfully to: $PLAYWRIGHT_BROWSERS_PATH"
 fi
 
 echo
@@ -141,7 +191,7 @@ else
     echo "Possible issues:"
     echo "1. You didn't complete the login in the Playwright browser"
     echo "2. Playwright browser failed to open (check errors above)"
-    echo "3. Missing Chromium: Run: $PYTHON_CMD -m playwright install chromium"
+    echo "3. You may have logged into the wrong browser window"
     echo
     echo "Try running auth_helper.sh again."
     echo "=============================================="
