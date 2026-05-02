@@ -343,6 +343,29 @@ NOTEBOOKLM_NOTEBOOK_NAME = "Anki Flashcard Notebook"
 
 ## Troubleshooting
 
+### Authentication Issues
+
+**Browser opens but you're already logged in / Flashcard generation says "login required":**
+
+This usually means you logged into the **wrong browser**. The authentication uses Playwright which opens a **separate browser window** (not your default Chrome/Edge).
+
+1. Run the auth helper: `auth_helper.bat` (Windows) or `./auth_helper.sh` (Linux/macOS)
+2. A **Playwright browser window** will open (may open behind other windows - check taskbar/dock)
+3. Log in to Google **in that specific window** (not your default browser)
+4. Wait until you see the NotebookLM homepage, then return to the script and press ENTER
+5. Verify credentials were saved: Check for `%USERPROFILE%\.notebooklm\storage_state.json` (Windows) or `~/.notebooklm/storage_state.json` (Linux/macOS)
+
+**Using system Chrome instead of Playwright's Chromium:**
+- When running `auth_helper.bat` or `auth_helper.sh`, choose "Y" when asked to use system Chrome
+- This avoids downloading ~300MB of Chromium browser
+- Requires Chrome to be installed in the default location
+
+**Common authentication errors:**
+- `Playwright not installed` → Run: `python -m playwright install chromium`
+- `Credentials not found` → Re-run auth helper, ensure you log in to the Playwright browser
+- `Authentication expired` → Re-run auth helper (sessions expire ~30 days)
+- VPN/AdBlocker blocking → Disable temporarily during authentication
+
 | Issue | Solution |
 |-------|----------|
 | **"notebooklm library not found"** | Reinstall addon → ensure `libs/` folder exists in addon directory |
