@@ -52,12 +52,22 @@ echo Using Python: %PYTHON_CMD%
 echo.
 
 :check_playwright
-echo Checking if Playwright is installed...
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright" >nul 2>&1
+echo Checking if Playwright is installed in bundled libs...
+echo Checking: %ADDON_DIR%\libs
 
-if %errorlevel%==0 (
-    echo Playwright already installed.
-    goto :verify_playwright_libs
+REM Check if playwright folder exists first
+if exist "%ADDON_DIR%\libs\playwright" (
+    echo Playwright package folder found.
+    REM Try to import
+    for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+    %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright" >nul 2>&1
+    if %errorlevel%==0 (
+        echo Playwright already installed and working.
+        goto :verify_playwright_libs
+    )
+    echo Playwright folder exists but import failed. Will reinstall...
+) else (
+    echo Playwright not found in bundled libs.
 )
 
 :install_playwright
@@ -92,7 +102,19 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Verifying installation...
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
+echo Checking libs folder: %ADDON_DIR%\libs
+
+REM Check if playwright folder exists in libs
+if not exist "%ADDON_DIR%\libs\playwright" (
+    echo ERROR: playwright folder not found in libs!
+    echo Expected: %ADDON_DIR%\libs\playwright
+    pause
+    exit /b 1
+)
+
+REM Try to import with proper path handling
+for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright; import pyee; import greenlet; print('Verification passed')" >nul 2>&1
 
 if %errorlevel% neq 0 (
     echo.
@@ -101,24 +123,34 @@ if %errorlevel% neq 0 (
     echo.
     echo Debug information:
     echo Python command used: %PYTHON_CMD%
-    echo PYTHONPATH: %PYTHONPATH%
+    echo Libs path: %LIBS_PATH%
     echo.
     echo Please try:
     echo 1. Close and reopen Command Prompt
     echo 2. Run as a REGULAR user (not administrator)
-    echo 3. Manually run: %PYTHON_CMD% -c "import playwright"
     echo.
     pause
     exit /b 1
 )
 
+echo Verification passed!
 echo Playwright and dependencies installed successfully.
 echo.
 goto :ask_browser
 
 :verify_playwright_libs
 echo Verifying bundled Playwright works...
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, '%ADDON_DIR%\libs'); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
+echo Checking libs folder: %ADDON_DIR%\libs
+
+REM Check if playwright folder exists
+if not exist "%ADDON_DIR%\libs\playwright" (
+    echo Playwright folder not found. Installing...
+    goto :install_playwright
+)
+
+REM Verify imports work
+for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Bundled Playwright verification failed. Reinstalling...
     goto :install_playwright
