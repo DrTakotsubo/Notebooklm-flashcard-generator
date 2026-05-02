@@ -280,9 +280,9 @@ echo.
 set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
 if not exist "%ADDON_DIR%\browsers" mkdir "%ADDON_DIR%\browsers"
 
-REM Set LIBS_PATH for Chromium install
-for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright" -m playwright install chromium
+REM Set PYTHONPATH so playwright can be found
+set PYTHONPATH=%ADDON_DIR%\libs
+%PYTHON_CMD% -m playwright install chromium
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Failed to install Chromium.
@@ -346,14 +346,23 @@ echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
 echo PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
 echo.
 
-REM Run login with proper environment
-for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
 echo Starting NotebookLM authentication...
-echo Using libs path: %LIBS_PATH%
 
-REM Set environment variables for the notebooklm process
+REM Set environment variables at batch level (THESE WILL BE INHERITED BY SUBPROCESS)
 set PYTHONPATH=%ADDON_DIR%\libs
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import os; os.environ['NOTEBOOKLM_BROWSER_PATH']=r'%NOTEBOOKLM_BROWSER_PATH%'; os.environ['PLAYWRIGHT_BROWSERS_PATH']=r'%PLAYWRIGHT_BROWSERS_PATH%'; os.environ['PYTHONPATH']=r'%LIBS_PATH%'; import subprocess; subprocess.run([r'%PYTHON_CMD%', '-m', 'notebooklm', 'login'])"
+
+REM Only set NOTEBOOKLM_BROWSER_PATH if it's not empty (user chose Chrome)
+if not "%NOTEBOOKLM_BROWSER_PATH%"=="" (
+    set NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
+)
+
+REM Set browser path for Chromium if installed
+if not "%PLAYWRIGHT_BROWSERS_PATH%"=="" (
+    set PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
+)
+
+REM Run login directly - notebooklm will read from environment variables
+%PYTHON_CMD% -m notebooklm login
 
 REM Verify credentials
 set STORAGE_PATH=%USERPROFILE%\.notebooklm\storage_state.json
