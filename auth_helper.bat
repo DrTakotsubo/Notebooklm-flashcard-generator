@@ -301,6 +301,10 @@ echo PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers > "%ADDON_DIR%\browser_config
 echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
 echo.
 
+echo Press any key to continue to login...
+pause >nul
+echo.
+
 goto :do_login
 
 :do_login
@@ -346,10 +350,12 @@ echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
 echo PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
 echo.
 
-echo Starting NotebookLM authentication...
-
-REM Set environment variables at batch level (THESE WILL BE INHERITED BY SUBPROCESS)
+REM Set environment variables at batch level (for current session AND subprocesses)
 set PYTHONPATH=%ADDON_DIR%\libs
+set PYTHONPATH=%PYTHONPATH%;%ADDON_DIR%\libs
+
+REM Set NOTEBOOKLM_HOME to ensure notebooklm knows where to save files
+set NOTEBOOKLM_HOME=%USERPROFILE%\.notebooklm
 
 REM Only set NOTEBOOKLM_BROWSER_PATH if it's not empty (user chose Chrome)
 if not "%NOTEBOOKLM_BROWSER_PATH%"=="" (
@@ -361,8 +367,91 @@ if not "%PLAYWRIGHT_BROWSERS_PATH%"=="" (
     set PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
 )
 
-REM Run login directly - notebooklm will read from environment variables
-%PYTHON_CMD% -m notebooklm login
+echo NOTEBOOKLM_HOME=%NOTEBOOKLM_HOME%
+echo.
+
+REM Test if playwright can be imported (critical for browser launch)
+echo.
+echo Testing playwright import...
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import playwright; print('playwright OK')" 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Cannot import playwright!
+    echo This is required for browser automation.
+    pause
+    exit /b 1
+)
+echo playwright imported successfully.
+
+REM Test if notebooklm module can be imported
+echo.
+echo Testing notebooklm module import...
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import notebooklm; print('notebooklm module OK')" 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Cannot import notebooklm module!
+    pause
+    exit /b 1
+)
+echo notebooklm module imported successfully.
+
+REM Test if notebooklm CLI can be invoked
+echo.
+echo Testing notebooklm CLI...
+%PYTHON_CMD% -m notebooklm --help 2>&1 | findstr /C:"login" >nul
+if %errorlevel% neq 0 (
+    echo WARNING: notebooklm CLI help check failed, but continuing...
+)
+echo notebooklm CLI OK.
+
+REM Direct browser launch test (to diagnose if browser can open at all)
+echo.
+echo Testing direct browser launch...
+echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
+if not "%NOTEBOOKLM_BROWSER_PATH%"=="" (
+    echo.
+    echo TEST 1: Trying to launch Chrome via channel...
+    %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import os; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(channel='chrome', headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result1.txt
+    if exist tmp_result1.txt (
+        echo   Result: SUCCESS - Browser launched via channel!
+        del tmp_result1.txt
+    ) else (
+        echo   Result: Channel method failed, trying alternative...
+        
+        echo.
+        echo TEST 2: Trying with executable_path...
+        %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import os; from playwright.sync_api import sync_playwright; browser_path = os.environ.get('NOTEBOOKLM_BROWSER_PATH', '').strip(); p=sync_playwright().start(); b=p.chromium.launch(executable_path=browser_path, headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result2.txt
+        if exist tmp_result2.txt (
+            echo   Result: SUCCESS - Browser launched via executable_path!
+            del tmp_result2.txt
+        ) else (
+            echo   Result: Both methods failed!
+        )
+    )
+) else (
+    echo No browser path configured, skipping direct test.
+)
+
+echo.
+echo Starting NotebookLM authentication...
+echo If browser doesn't open, check errors below...
+echo.
+
+REM Run custom login script that uses Playwright directly (bypasses notebooklm issues)
+echo.
+echo Running custom login script (using Playwright directly)...
+echo This should open a browser window for authentication.
+echo ========================================
+echo CUSTOM LOGIN START
+echo ========================================
+set PYTHONPATH=%ADDON_DIR%\libs
+%PYTHON_CMD% "%ADDON_DIR%\custom_login.py"
+set LOGIN_RESULT=%errorlevel%
+echo ========================================
+echo CUSTOM LOGIN END (result: %LOGIN_RESULT%)
+echo ========================================
+echo.
+echo.
 
 REM Verify credentials
 set STORAGE_PATH=%USERPROFILE%\.notebooklm\storage_state.json

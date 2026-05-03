@@ -428,6 +428,29 @@ class NotebookLMDialog(QDialog):
 
     # -- Anki note creation ---------------------------------------------------
 
+    def _clean_flashcard_text(self, text):
+        """Clean flashcard text: remove citations, fix bullet formatting."""
+        import re
+        
+        # Remove citation numbers like [1], [2], [123] from end of text
+        text = re.sub(r'\s*\[\d+\]\s*$', '', text)
+        text = re.sub(r'\s*\[\d+(,\s*\d+)*\]\s*$', '', text)
+        
+        # Fix continuous bullet points - convert "• A • B • C" to separate lines
+        # Handle "• A• B• C" (no space after bullet) and "• A • B" (space after bullet)
+        text = re.sub(r'(?<!\n)•\s*', '\n• ', text)
+        
+        # Also handle dash bullets "- Item - Item"
+        text = re.sub(r'(?<!\n)-\s+', '\n- ', text)
+        
+        # Clean up multiple newlines (more than 2 becomes 2)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Trim leading/trailing whitespace
+        text = text.strip()
+        
+        return text
+
     def _add_flashcards_to_anki(self, flashcards):
         """Parse the flashcard JSON and add Basic notes to the selected deck."""
         col = mw.col
@@ -444,8 +467,8 @@ class NotebookLMDialog(QDialog):
 
         added = 0
         for card in flashcards:
-            front = card.get("Front", "").strip()
-            back = card.get("Back", "").strip()
+            front = self._clean_flashcard_text(card.get("Front", "").strip())
+            back = self._clean_flashcard_text(card.get("Back", "").strip())
             if not front or not back:
                 continue
 

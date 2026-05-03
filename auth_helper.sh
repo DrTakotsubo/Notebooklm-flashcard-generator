@@ -236,6 +236,7 @@ echo
 
 # Set environment for notebooklm login
 export PYTHONPATH="$SCRIPT_DIR/libs"
+export NOTEBOOKLM_HOME="$HOME/.notebooklm"
 
 # Load browser config if exists
 if [[ -f "$SCRIPT_DIR/browser_config.ini" ]]; then
@@ -248,8 +249,24 @@ if [[ -d "$SCRIPT_DIR/browsers" ]]; then
     export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
 fi
 
-# Run login
-$PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs')" -m notebooklm login
+echo "NOTEBOOKLM_HOME=$NOTEBOOKLM_HOME"
+echo
+
+# Note: Using custom_login.py which uses Playwright directly
+
+# Run custom login script that uses Playwright directly (bypasses notebooklm issues)
+echo
+echo "Running custom login script (using Playwright directly)..."
+echo "This should open a browser window for authentication."
+echo "================================================"
+echo "CUSTOM LOGIN START"
+echo "================================================"
+export PYTHONPATH="$SCRIPT_DIR/libs"
+python3 "$SCRIPT_DIR/custom_login.py"
+echo "================================================"
+echo "CUSTOM LOGIN END"
+echo "================================================"
+echo
 
 # Verify credentials
 STORAGE_PATH="$HOME/.notebooklm/storage_state.json"
