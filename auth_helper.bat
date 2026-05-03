@@ -280,6 +280,19 @@ echo.
 set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
 if not exist "%ADDON_DIR%\browsers" mkdir "%ADDON_DIR%\browsers"
 
+REM Check if Playwright and Chromium are already installed (skip slow install)
+echo Checking if Playwright is already installed...
+%PYTHON_CMD% -c "import playwright; print('Playwright installed')" >nul 2>&1
+if %errorlevel%==0 (
+    echo Playwright already installed, checking Chromium...
+    set PYTHONPATH=%ADDON_DIR%\libs
+    %PYTHON_CMD% -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start().chromium.launchable_channels(); sync_playwright().stop()" >nul 2>&1
+    if %errorlevel%==0 (
+        echo Chromium already available, skipping installation!
+        goto :run_custom_login
+    )
+)
+
 REM Set PYTHONPATH so playwright can be found
 set PYTHONPATH=%ADDON_DIR%\libs
 %PYTHON_CMD% -m playwright install chromium
@@ -299,6 +312,8 @@ echo.
 REM Save browser config for addon
 echo PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers > "%ADDON_DIR%\browser_config.ini"
 echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
+
+:run_custom_login
 echo.
 
 echo Press any key to continue to login...

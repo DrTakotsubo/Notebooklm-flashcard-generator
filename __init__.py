@@ -158,15 +158,18 @@ ADDON_MENU_TEXT = "Import from NotebookLM..."
 # END OF CONFIGURATION BLOCK
 # =============================================================================
 
-
 import os
 import json
+import subprocess
+import time
+from pathlib import Path
 
 from aqt import mw
 from aqt.qt import (
     QAction, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QComboBox, QFormLayout, QTextEdit,
-    QProgressBar, QThread, pyqtSignal, Qt,
+    QProgressBar, QThread, pyqtSignal, Qt, QIcon, QPixmap, QPainter,
+    QColor, QFont,
 )
 from aqt.utils import showWarning, showInfo, tooltip
 
@@ -174,9 +177,104 @@ from . import notebooklm
 from .prompt_manager import load_prompts, PromptManagerDialog
 
 
-# -----------------------------------------------------------------------------
-# Worker thread for non-blocking flashcard generation
-# -----------------------------------------------------------------------------
+# =============================================================================
+# AUTHENTICATION HELPERS
+# =============================================================================
+
+def _get_addon_dir():
+    """Get the addon directory path."""
+    return Path(__file__).parent
+
+
+def _get_auth_paths():
+    """Get list of possible storage_state.json paths."""
+    from notebooklm import notebooklm as nb_module
+    return nb_module._get_auth_paths()
+
+
+def check_auth_age():
+    """Check authentication file age and return status.
+    
+    Returns:
+        tuple: (days_old, message)
+            - days_old: int or None if file not found
+            - message: str with status message
+    """
+    # Check multiple possible auth paths
+    auth_paths = _get_auth_paths()
+    
+    # Also check addon directory
+    addon_storage = _get_addon_dir() / "storage_state.json"
+    if addon_storage.exists():
+        auth_paths.append(addon_storage)
+    
+    # Find the most recent auth file
+    newest_path = None
+    newest_mtime = 0
+    
+    for path in auth_paths:
+        try:
+            mtime = os.path.getmtime(path)
+            if mtime > newest_mtime:
+                newest_mtime = mtime
+                newest_path = path
+        except:
+            continue
+    
+    if not newest_path:
+        return (None, "Not authenticated. Click 'Re-authenticate' to login.")
+    
+    # Calculate days since last auth
+    days_old = int((time.time() - newest_mtime) / 86400)
+    
+    if days_old < 0:
+        days_old = 0
+    
+    # Generate message based on age
+    if days_old == 0:
+        message = "Authenticated today"
+    elif days_old == 1:
+        message = "Authenticated yesterday"
+    elif days_old < 5:
+        message = f"⚠️ Auth expires in {5 - days_old} day(s)"
+    elif days_old < 25:
+        message = f"Authenticated {days_old} days ago"
+    else:
+        message = f"⚠️ Auth expires soon ({days_old} days). Click 'Re-authenticate'"
+    
+    return (days_old, message)
+
+
+def reauthenticate():
+    """Launch the auth helper script to re-authenticate."""
+    import sys
+    
+    addon_dir = _get_addon_dir()
+    
+    # Determine platform and script
+    if sys.platform == "win32":
+        script = addon_dir / "auth_helper.bat"
+        # Use cmd /c to run batch file
+        try:
+            subprocess.Popen(["cmd", "/c", str(script)], 
+                            cwd=str(addon_dir),
+                            creationflags=subprocess.CREATE_NEW_CONSOLE)
+            return True
+        except Exception as e:
+            return False
+    else:
+        script = addon_dir / "auth_helper.sh"
+        try:
+            subprocess.Popen(["bash", str(script)],
+                            cwd=str(addon_dir))
+            return True
+        except Exception as e:
+            return False
+
+
+# =============================================================================
+# UI DIALOG
+# =============================================================================
 
 class NotebookLMWorker(QThread):
     """Background thread that handles the NotebookLM API calls."""
@@ -227,7 +325,10 @@ class NotebookLMDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Import from NotebookLM")
         self.setMinimumWidth(500)
-        self.setMinimumHeight(350)
+        self.setMinimumHeight(380)
+
+        # Check auth age on init
+        self.auth_days_old, self.auth_message = check_auth_age()
 
         self._build_ui()
         self._populate_decks()
@@ -288,6 +389,24 @@ class NotebookLMDialog(QDialog):
         self.progress_label.setStyleSheet("color: gray; font-style: italic;")
         self.progress_label.setVisible(False)
 
+        # Auth warning label
+        self.auth_warning_label = QLabel("")
+        self.auth_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._update_auth_warning()
+
+        # Re-authenticate button
+        self.reauth_btn = QPushButton("Re-authenticate")
+        self.reauth_btn.setFixedWidth(150)
+        self.reauth_btn.setVisible(False)
+        self.reauth_btn.clicked.connect(self._reauthenticate)
+
+        # Auth button layout
+        auth_btn_layout = QHBoxLayout()
+        auth_btn_layout.addStretch()
+        auth_btn_layout.addWidget(self.auth_warning_label)
+        auth_btn_layout.addWidget(self.reauth_btn)
+        auth_btn_layout.addStretch()
+
         # Generate button
         self.generate_btn = QPushButton("Generate Flashcards")
         self.generate_btn.setStyleSheet(
@@ -301,6 +420,7 @@ class NotebookLMDialog(QDialog):
         layout.addLayout(deck_layout)
         layout.addLayout(pdf_layout)
         layout.addWidget(self.progress_label)
+        layout.addLayout(auth_btn_layout)
         layout.addWidget(self.generate_btn)
 
     # -- Deck population ------------------------------------------------------
@@ -320,6 +440,48 @@ class NotebookLMDialog(QDialog):
         prompts = load_prompts(NOTEBOOKLM_PROMPTS)
         for name in sorted(prompts.keys()):
             self.prompt_selector.addItem(name)
+
+    # -- Auth warning ---------------------------------------------------------
+
+    def _update_auth_warning(self):
+        """Update the auth warning label based on auth age."""
+        days_old, message = check_auth_age()
+        self.auth_warning_label.setText(message)
+        
+        # Show warning styling for expiry situations
+        if days_old is not None and days_old >= 25:
+            self.auth_warning_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
+            self.reauth_btn.setVisible(True)
+        elif days_old is not None and days_old >= 5:
+            self.auth_warning_label.setStyleSheet("color: #f57c00;")
+            self.reauth_btn.setVisible(False)
+        elif days_old is None:
+            self.auth_warning_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
+            self.reauth_btn.setVisible(True)
+        else:
+            # Less than 5 days - show countdown
+            if days_old is not None:
+                days_left = 5 - days_old
+                self.auth_warning_label.setText(f"⚠️ Auth expires in {days_left} day(s)")
+            self.auth_warning_label.setStyleSheet("color: #1976d2;")
+            self.reauth_btn.setVisible(False)
+
+    def _reauthenticate(self):
+        """Launch the auth helper to re-authenticate."""
+        self.generate_btn.setEnabled(False)
+        self.progress_label.setText("Opening auth window...")
+        self.progress_label.setVisible(True)
+        self.progress_label.repaint()
+        
+        success = reauthenticate()
+        
+        if success:
+            self.progress_label.setText("Auth window opened! Complete login there.")
+            tooltip("Please complete authentication in the browser window, then return here.")
+        else:
+            self.progress_label.setText("Failed to open auth window")
+            showWarning("Could not open authentication window. Please run auth_helper.bat manually.")
+            self.generate_btn.setEnabled(True)
 
     # -- File browsing --------------------------------------------------------
 
@@ -352,7 +514,8 @@ class NotebookLMDialog(QDialog):
             return
 
         prompt_key = self.prompt_selector.currentText()
-        prompt = NOTEBOOKLM_PROMPTS[prompt_key]
+        prompts = load_prompts(NOTEBOOKLM_PROMPTS)
+        prompt = prompts[prompt_key]
 
         self.generate_btn.setEnabled(False)
         self.generate_btn.setText("Generating...")
@@ -492,3 +655,36 @@ def _launch_dialog():
 action = QAction(ADDON_MENU_TEXT, mw)
 action.triggered.connect(_launch_dialog)
 mw.form.menuTools.addAction(action)
+
+
+# =============================================================================
+# Add toolbar button on main window (right side of toolbar)
+# =============================================================================
+
+def _create_notebooklm_icon():
+    """Create a NotebookLM-style icon (blue circle with NL text)."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Blue background circle (NotebookLM brand color)
+    painter.setBrush(QColor(66, 133, 244))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(2, 2, 28, 28)
+    
+    # White "NL" text
+    painter.setPen(QColor(255, 255, 255))
+    font = QFont("Arial", 10, QFont.Weight.Bold)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), 0x0084, "NL")  # AlignCenter
+    painter.end()
+    
+    return QIcon(pixmap)
+
+
+# Add button to toolbar (after existing buttons)
+toolbar_action = QAction(_create_notebooklm_icon(), "NotebookLM", mw)
+toolbar_action.setToolTip("Generate flashcards from PDF with NotebookLM")
+toolbar_action.triggered.connect(_launch_dialog)
+mw.form.toolBar.addAction(toolbar_action)
