@@ -165,6 +165,50 @@ def _extract_json(text: str) -> list[dict]:
     )
 
 
+def extract_pdf_images(pdf_path: str, temp_dir: str) -> dict[int, list[str]]:
+    """Extract all images from a PDF and save them as files in temp_dir.
+    
+    Returns:
+        dict: mapping 1-based page number to list of absolute image file paths.
+    """
+    from pypdf import PdfReader
+    import os
+    
+    page_images = {}
+    if not os.path.exists(pdf_path):
+        return page_images
+        
+    try:
+        reader = PdfReader(pdf_path)
+        for page_idx, page in enumerate(reader.pages):
+            page_num = page_idx + 1
+            images_list = []
+            
+            # Extract images from page
+            for img_idx, image_file_object in enumerate(page.images):
+                ext = ".png"
+                name = image_file_object.name
+                if not name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.tiff', '.bmp')):
+                    name = f"{name}.png"
+                
+                # Format a unique name in temp_dir
+                img_name = f"page_{page_num}_img_{img_idx}_{name}"
+                img_name = "".join([c if c.isalnum() or c in "._-" else "_" for c in img_name])
+                img_path = os.path.join(temp_dir, img_name)
+                
+                with open(img_path, "wb") as fp:
+                    fp.write(image_file_object.data)
+                
+                images_list.append(img_path)
+                
+            if images_list:
+                page_images[page_num] = images_list
+    except Exception as e:
+        print(f"PDF image extraction error: {e}")
+        
+    return page_images
+
+
 def upload_pdf(pdf_path: str, topic: str) -> str:
     """Upload a PDF file to NotebookLM and create a new notebook.
 

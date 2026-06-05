@@ -70,7 +70,7 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
     mkdir -p "$SCRIPT_DIR/libs"
 
     # Install notebooklm-py and all dependencies
-    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" "notebooklm-py[browser]"
+    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" "notebooklm-py[browser]" pypdf
 
     if [[ $? -ne 0 ]]; then
         echo

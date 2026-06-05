@@ -53,7 +53,7 @@ REM Create libs directory if it doesn't exist
 if not exist "libs\" mkdir libs
 
 REM Install required packages
-%PYTHON_CMD% -m pip install notebooklm-py playwright --target=libs/ --quiet
+%PYTHON_CMD% -m pip install notebooklm-py playwright pypdf --target=libs/ --quiet
 
 echo Dependencies installed.
 echo.

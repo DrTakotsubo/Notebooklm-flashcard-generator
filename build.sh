@@ -31,7 +31,7 @@ pip install notebooklm-py --target=libs/ --no-deps --quiet 2>/dev/null || true
 pip install httpx click rich markdown-it-py pygments --target=libs/ --quiet 2>/dev/null || true
 
 # Install all dependencies
-pip install notebooklm-py --target=libs/ --quiet
+pip install notebooklm-py pypdf --target=libs/ --quiet
 
 echo "Dependencies installed (playwright NOT bundled - users install it themselves)."
 echo

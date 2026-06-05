@@ -127,6 +127,26 @@ Example output:
   {"Front": "What are the investigations for pallor?", "Back": "• Bedside: Complete blood count\n• Bloods: Serum ferritin, peripheral smear\n• Imaging: Ultrasound abdomen if splenomegaly suspected"}
 ]
 """,
+
+    "Image/Diagram Flashcards": """\
+You are an expert tutor. Scan the uploaded document and systematically identify all figures, images, diagrams, flowcharts, illustrations, or tables.
+For each visual element, generate a flashcard that asks a conceptual, identification, or diagnostic question about it.
+
+CRITICAL REQUIREMENT: For each flashcard, you MUST include a "Page" key (integer) representing the 1-based page number where the image/diagram is located in the PDF.
+
+### OUTPUT FORMAT
+Return ONLY a valid JSON array of objects. Do NOT include any explanation, markdown, or text outside the JSON.
+Each object MUST have exactly three keys:
+1. "Page" (integer): The 1-based page number where the image/diagram is located.
+2. "Front" (string): A question or identification prompt about the image/diagram. Refer to the figure name or label (e.g., "Figure 2.1") if available.
+3. "Back" (string): The answer or detailed explanation of the diagram.
+
+Example output:
+[
+  {"Page": 3, "Front": "What process is illustrated in this diagram?", "Back": "This diagram shows the citric acid cycle (Krebs cycle), highlighting the condensation of acetyl-CoA with oxaloacetate."},
+  {"Page": 7, "Front": "Identify the anatomical structure labeled 'A' in the figure.", "Back": "Structure 'A' is the left atrium of the heart."}
+]
+"""
 }
 
 # Backwards compatibility: default prompt
@@ -324,7 +344,7 @@ class NotebookLMWorker(QThread):
     """Background thread that handles the NotebookLM API calls."""
 
     progress = pyqtSignal(str)
-    finished_success = pyqtSignal(list)
+    finished_success = pyqtSignal(list, dict)
     finished_error = pyqtSignal(str)
 
     def __init__(self, topic, pdf_path, prompt):
@@ -334,7 +354,24 @@ class NotebookLMWorker(QThread):
         self.prompt = prompt
 
     def run(self):
+        temp_dir = None
         try:
+            import tempfile
+            import os
+            import time
+            
+            # Create a unique temporary directory for this run's extracted images
+            temp_dir = os.path.join(tempfile.gettempdir(), f"anki_nb_imgs_{int(time.time())}")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            self.progress.emit("Extracting images from PDF...")
+            image_map = {}
+            try:
+                image_map = notebooklm.extract_pdf_images(self.pdf_path, temp_dir)
+                self.progress.emit(f"Extracted images from {len(image_map)} page(s)...")
+            except Exception as img_err:
+                print(f"Error extracting PDF images: {img_err}")
+                
             self.progress.emit("Uploading PDF to NotebookLM...")
             notebooklm.upload_pdf(self.pdf_path, self.topic)
 
@@ -347,7 +384,7 @@ class NotebookLMWorker(QThread):
             self.progress.emit("Cleaning up NotebookLM notebook...")
             notebooklm.delete_notebook()
 
-            self.finished_success.emit(flashcards_json)
+            self.finished_success.emit(flashcards_json, image_map)
 
         except Exception as e:
             # Try to clean up even on error
@@ -355,6 +392,13 @@ class NotebookLMWorker(QThread):
                 notebooklm.delete_notebook()
             except Exception:
                 pass
+            # Clean up temp_dir on error
+            if temp_dir and os.path.exists(temp_dir):
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
             self.finished_error.emit(str(e))
 
 
@@ -566,12 +610,12 @@ class NotebookLMDialog(QDialog):
     def _on_progress(self, message):
         self.progress_label.setText(message)
 
-    def _on_success(self, flashcards):
+    def _on_success(self, flashcards, image_map):
         self.generate_btn.setEnabled(True)
         self.generate_btn.setText("Generate Flashcards")
         self.progress_label.setVisible(False)
 
-        count = self._add_flashcards_to_anki(flashcards)
+        count = self._add_flashcards_to_anki(flashcards, image_map)
         self.close()
         showInfo(
             f"Successfully added {count} flashcard(s) to Anki!",
@@ -649,7 +693,7 @@ class NotebookLMDialog(QDialog):
         
         return text
 
-    def _add_flashcards_to_anki(self, flashcards):
+    def _add_flashcards_to_anki(self, flashcards, image_map):
         """Parse the flashcard JSON and add Basic notes to the selected deck."""
         col = mw.col
         deck_name = self.deck_selector.currentText()
@@ -664,19 +708,55 @@ class NotebookLMDialog(QDialog):
             return 0
 
         added = 0
+        imported_media = {}  # Cache imported media to avoid importing same file twice
+
         for card in flashcards:
             front_val = card.get("Front") or card.get("front") or ""
             back_val = card.get("Back") or card.get("back") or ""
+            page_val = card.get("Page") or card.get("page")
+            
             front = self._clean_flashcard_text(front_val.strip())
             back = self._clean_flashcard_text(back_val.strip())
             if not front or not back:
                 continue
+
+            # Embed page-matched images
+            img_html = ""
+            if page_val is not None:
+                try:
+                    page_num = int(page_val)
+                    if image_map and page_num in image_map:
+                        for img_path in image_map[page_num]:
+                            if os.path.exists(img_path):
+                                if img_path not in imported_media:
+                                    # Copy to Anki's media collection and get unique filename
+                                    media_filename = col.media.add_file(img_path)
+                                    imported_media[img_path] = media_filename
+                                else:
+                                    media_filename = imported_media[img_path]
+                                
+                                img_html += f'<img src="{media_filename}"><br><br>'
+                except Exception as e:
+                    print(f"Error importing media for page {page_val}: {e}")
+
+            if img_html:
+                front = f"{img_html}{front}"
 
             note = col.new_note(model)
             note["Front"] = front
             note["Back"] = back
             col.add_note(note, deck_id)
             added += 1
+
+        # Clean up temporary image files
+        if image_map:
+            for page_num, paths in image_map.items():
+                for p in paths:
+                    try:
+                        if os.path.exists(p):
+                            os.unlink(p)
+                    except:
+                        pass
 
         return added
 

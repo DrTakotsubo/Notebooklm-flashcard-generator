@@ -100,7 +100,7 @@ REM Clear pip cache first (fixes deserialization errors)
 %PYTHON_CMD% -m pip cache purge >nul 2>&1
 
 REM Install notebooklm-py and all dependencies
-%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" "notebooklm-py[browser]"
+%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" "notebooklm-py[browser]" pypdf
 
 if %errorlevel% neq 0 (
     echo.
