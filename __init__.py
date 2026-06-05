@@ -271,6 +271,7 @@ def reauthenticate():
             return False
     else:
         # Linux: look for common terminal emulators
+        script = addon_dir / "auth_helper.sh"
         import shutil
         terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm", "lxterminal", "mate-terminal"]
         for term in terminals:
@@ -499,7 +500,8 @@ class NotebookLMDialog(QDialog):
             tooltip("Please complete authentication in the browser window, then return here.")
         else:
             self.progress_label.setText("Failed to open auth window")
-            showWarning("Could not open authentication window. Please run auth_helper.bat manually.")
+            helper_name = "auth_helper.bat" if sys.platform == "win32" else "auth_helper.sh"
+            showWarning(f"Could not open authentication window. Please run {helper_name} manually.")
             self.generate_btn.setEnabled(True)
 
     # -- File browsing --------------------------------------------------------
