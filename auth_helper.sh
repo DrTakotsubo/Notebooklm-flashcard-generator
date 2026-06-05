@@ -69,8 +69,8 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
     # Create libs directory if it doesn't exist
     mkdir -p "$SCRIPT_DIR/libs"
 
-    # Install playwright with all dependencies
-    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" playwright pyee greenlet typing-extensions
+    # Install notebooklm-py and all dependencies
+    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" "notebooklm-py[browser]"
 
     if [[ $? -ne 0 ]]; then
         echo

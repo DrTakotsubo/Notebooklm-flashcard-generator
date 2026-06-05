@@ -262,11 +262,31 @@ def reauthenticate():
             return True
         except Exception as e:
             return False
-    else:
-        script = addon_dir / "auth_helper.sh"
+    elif sys.platform == "darwin":
+        # macOS: run in Terminal.app using osascript
+        cmd = f'tell application "Terminal" to do script "cd \\"{addon_dir}\\" && chmod +x auth_helper.sh && ./auth_helper.sh"'
         try:
-            subprocess.Popen(["bash", str(script)],
-                            cwd=str(addon_dir))
+            subprocess.Popen(["osascript", "-e", cmd])
+            return True
+        except Exception as e:
+            return False
+    else:
+        # Linux: look for common terminal emulators
+        import shutil
+        terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm", "lxterminal", "mate-terminal"]
+        for term in terminals:
+            if shutil.which(term):
+                try:
+                    if term == "gnome-terminal":
+                        subprocess.Popen([term, "--", "bash", str(script)], cwd=str(addon_dir))
+                    else:
+                        subprocess.Popen([term, "-e", "bash", str(script)], cwd=str(addon_dir))
+                    return True
+                except Exception:
+                    continue
+        # Fallback to direct execution if no terminal emulator is installed
+        try:
+            subprocess.Popen(["bash", str(script)], cwd=str(addon_dir))
             return True
         except Exception as e:
             return False
@@ -630,8 +650,10 @@ class NotebookLMDialog(QDialog):
 
         added = 0
         for card in flashcards:
-            front = self._clean_flashcard_text(card.get("Front", "").strip())
-            back = self._clean_flashcard_text(card.get("Back", "").strip())
+            front_val = card.get("Front") or card.get("front") or ""
+            back_val = card.get("Back") or card.get("back") or ""
+            front = self._clean_flashcard_text(front_val.strip())
+            back = self._clean_flashcard_text(back_val.strip())
             if not front or not back:
                 continue
 

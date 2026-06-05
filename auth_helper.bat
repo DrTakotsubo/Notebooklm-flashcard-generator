@@ -99,8 +99,8 @@ echo.
 REM Clear pip cache first (fixes deserialization errors)
 %PYTHON_CMD% -m pip cache purge >nul 2>&1
 
-REM Install playwright with all dependencies
-%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" playwright pyee greenlet typing-extensions
+REM Install notebooklm-py and all dependencies
+%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" "notebooklm-py[browser]"
 
 if %errorlevel% neq 0 (
     echo.

@@ -25,7 +25,7 @@ async def check_auth():
         return False
 
     try:
-        async with await NotebookLMClient.from_storage() as client:
+        async with NotebookLMClient.from_storage() as client:
             notebooks = await client.notebooks.list()
             print(f"✅ Authentication working! Found {len(notebooks)} notebooks.")
             return True

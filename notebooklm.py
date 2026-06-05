@@ -227,9 +227,10 @@ def upload_pdf(pdf_path: str, topic: str) -> str:
             last_error = None
             for auth_path in auth_paths:
                 try:
-                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                    async with NotebookLMClient.from_storage(path=str(auth_path)) as client:
                         nb = await client.notebooks.create(topic)
-                        await client.sources.add_file(nb.id, Path(pdf_path), wait=True)
+                        source = await client.sources.add_file(notebook_id=nb.id, path=Path(pdf_path))
+                        await client.sources.wait_until_ready(notebook_id=nb.id, source_id=source.id)
                         return nb.id
                 except Exception as e:
                     last_error = e
@@ -301,9 +302,48 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
             last_error = None
             for auth_path in auth_paths:
                 try:
-                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
-                        result = await client.chat.ask(notebook_id, prompt)
-                        return result.answer
+                    async with NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                        try:
+                            # 1. Try native flashcard generation
+                            status = await client.artifacts.generate_flashcards(
+                                notebook_id=notebook_id,
+                                instructions=prompt
+                            )
+                            await client.artifacts.wait_for_completion(notebook_id, status.task_id)
+                            
+                            temp_output = Path(__file__).parent / "temp_flashcards.json"
+                            if temp_output.exists():
+                                try:
+                                    temp_output.unlink()
+                                except:
+                                    pass
+                                    
+                            await client.artifacts.download_flashcards(
+                                notebook_id=notebook_id,
+                                output_path=str(temp_output),
+                                output_format="json"
+                            )
+                            
+                            with open(temp_output, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                                
+                            try:
+                                temp_output.unlink()
+                            except:
+                                pass
+                                
+                            cards = data.get("cards", [])
+                            normalized_cards = []
+                            for card in cards:
+                                normalized_cards.append({
+                                    "Front": card.get("front", ""),
+                                    "Back": card.get("back", "")
+                                })
+                            return normalized_cards
+                        except Exception as native_err:
+                            # Fallback to chat-based generation
+                            result = await client.chat.ask(notebook_id, prompt)
+                            return _extract_json(result.answer)
                 except Exception as e:
                     last_error = e
                     if "auth" in str(e).lower() or "login" in str(e).lower() or "cookie" in str(e).lower():
@@ -323,8 +363,7 @@ def generate_flashcards(topic: str, prompt: str) -> list[dict]:
                 raise last_error
             raise RuntimeError("Authentication failed for unknown reason.")
 
-        answer = _run_async(_generate())
-        return _extract_json(answer)
+        return _run_async(_generate())
 
     return _do_generate()
 
@@ -347,7 +386,7 @@ def delete_notebook() -> None:
             auth_paths = _get_auth_paths()
             for auth_path in (auth_paths if auth_paths else [Path(_NotebookLM_AUTH_PATH)]):
                 try:
-                    async with await NotebookLMClient.from_storage(path=str(auth_path)) as client:
+                    async with NotebookLMClient.from_storage(path=str(auth_path)) as client:
                         await client.notebooks.delete(notebook_id)
                         return
                 except Exception:
