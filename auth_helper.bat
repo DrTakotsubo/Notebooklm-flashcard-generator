@@ -24,14 +24,14 @@ if %errorlevel%==0 set PYTHON_CMD=python
 REM Try py next
 if "%PYTHON_CMD%"=="" (
     py --version >nul 2>&1
-    if !errorlevel!==0 set PYTHON_CMD=py
 )
+if "%PYTHON_CMD%"=="" if %errorlevel%==0 set PYTHON_CMD=py
 
 REM Try python3 next
 if "%PYTHON_CMD%"=="" (
     python3 --version >nul 2>&1
-    if !errorlevel!==0 set PYTHON_CMD=python3
 )
+if "%PYTHON_CMD%"=="" if %errorlevel%==0 set PYTHON_CMD=python3
 
 if "%PYTHON_CMD%"=="" (
     echo ==============================================
