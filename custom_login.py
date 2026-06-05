@@ -17,32 +17,53 @@ sys.path.insert(0, LIBS_DIR)
 
 
 def find_chrome_path():
-    """Auto-detect Chrome installation path on Windows."""
-    import subprocess
+    """Auto-detect Chrome/Chromium installation path across platforms."""
+    import sys
+    import shutil
     
-    possible_paths = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-    ]
-    
+    # If environment variable is set and valid, prioritize it
     env_path = os.environ.get('NOTEBOOKLM_BROWSER_PATH', '').strip()
     if env_path and os.path.exists(env_path):
         return env_path
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    
-    try:
-        result = subprocess.run(['where', 'chrome'], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            chrome_path = result.stdout.strip().split('\n')[0]
-            if os.path.exists(chrome_path):
-                return chrome_path
-    except:
-        pass
-    
+        
+    if sys.platform == "win32":
+        possible_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        try:
+            import subprocess
+            result = subprocess.run(['where', 'chrome'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                chrome_path = result.stdout.strip().split('\n')[0]
+                if os.path.exists(chrome_path):
+                    return chrome_path
+        except:
+            pass
+    elif sys.platform == "darwin":
+        possible_paths = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        for b in ["google-chrome", "chromium", "chromium-browser"]:
+            p = shutil.which(b)
+            if p:
+                return p
+    else:
+        # Linux
+        possible_commands = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+        for cmd in possible_commands:
+            path = shutil.which(cmd)
+            if path:
+                return path
+                
     return None
 
 
@@ -123,16 +144,22 @@ def main():
                 print("SUCCESS: Browser launched using NOTEBOOKLM_BROWSER_PATH")
             except Exception as e:
                 print(f"ERROR with env path: {e}")
+                
+        if browser is None:
+            try:
+                print("Attempting to launch using Playwright's built-in Chromium...")
+                browser = p.chromium.launch(**launch_args)
+                print("SUCCESS: Browser launched using built-in Chromium")
+            except Exception as e:
+                print(f"ERROR with built-in Chromium: {e}")
         
         if browser is None:
             print()
             print("=" * 50)
-            print("ERROR: Could not launch Chrome")
+            print("ERROR: Could not launch Chrome or Playwright Chromium")
             print("=" * 50)
             print()
-            print("Please ensure Chrome is installed.")
-            if not chrome_path:
-                print("Auto-detection failed. Set NOTEBOOKLM_BROWSER_PATH environment variable.")
+            print("Please ensure Google Chrome is installed, or run Option 2 to download Playwright Chromium.")
             return 1
         
         context = browser.new_context(ignore_https_errors=True)

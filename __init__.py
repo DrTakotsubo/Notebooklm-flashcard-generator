@@ -273,23 +273,51 @@ def reauthenticate():
         # Linux: look for common terminal emulators
         script = addon_dir / "auth_helper.sh"
         import shutil
-        terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm", "lxterminal", "mate-terminal"]
+        import os
+        
+        # Clean environment to avoid Qt/Python library conflicts from Anki
+        env = os.environ.copy()
+        for var in list(env.keys()):
+            if var.startswith("PYTHON") or var.startswith("QT_") or var == "LD_LIBRARY_PATH":
+                env.pop(var, None)
+                
+        terminals = [
+            "x-terminal-emulator",
+            "xdg-terminal-exec",
+            "sensible-terminal",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+            "xterm",
+            "lxterminal",
+            "mate-terminal",
+            "foot",
+            "kitty",
+            "alacritty"
+        ]
+        
         for term in terminals:
             if shutil.which(term):
                 try:
-                    if term == "gnome-terminal":
-                        subprocess.Popen([term, "--", "bash", str(script)], cwd=str(addon_dir))
+                    # Construct launch command based on terminal capabilities
+                    if term in ["xdg-terminal-exec", "sensible-terminal", "foot", "kitty", "alacritty"]:
+                        cmd = [term, "bash", str(script)]
+                    elif term == "gnome-terminal":
+                        cmd = [term, "--", "bash", str(script)]
                     else:
-                        subprocess.Popen([term, "-e", "bash", str(script)], cwd=str(addon_dir))
+                        cmd = [term, "-e", "bash", str(script)]
+                    
+                    subprocess.Popen(cmd, cwd=str(addon_dir), env=env)
                     return True
                 except Exception:
                     continue
         # Fallback to direct execution if no terminal emulator is installed
         try:
-            subprocess.Popen(["bash", str(script)], cwd=str(addon_dir))
+            subprocess.Popen(["bash", str(script)], cwd=str(addon_dir), env=env)
             return True
         except Exception as e:
             return False
+
 
 
 # =============================================================================

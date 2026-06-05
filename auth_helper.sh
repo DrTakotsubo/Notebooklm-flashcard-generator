@@ -108,11 +108,9 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
 
     echo "Playwright and dependencies installed successfully."
     echo
+
 fi
 
-    echo "Playwright and dependencies installed successfully."
-    echo
-fi
 
 # Browser selection menu
 echo
