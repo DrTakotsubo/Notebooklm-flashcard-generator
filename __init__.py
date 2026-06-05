@@ -188,8 +188,7 @@ def _get_addon_dir():
 
 def _get_auth_paths():
     """Get list of possible storage_state.json paths."""
-    from notebooklm import notebooklm as nb_module
-    return nb_module._get_auth_paths()
+    return notebooklm._get_auth_paths()
 
 
 def check_auth_age():
