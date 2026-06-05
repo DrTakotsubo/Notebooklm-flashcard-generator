@@ -9,11 +9,24 @@ Uses system Chrome (auto-detected) - NO Chromium download required.
 import sys
 import os
 
-os.environ['PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD'] = '1'
+def get_notebooklm_dir():
+    import platform
+    home = os.environ.get('USERPROFILE') if platform.system() == "Windows" else os.path.expanduser("~")
+    if platform.system() != "Windows":
+        flatpak_data = os.path.join(home, ".var", "app", "net.ankiweb.Anki", "data")
+        if os.path.exists(flatpak_data):
+            return os.path.join(flatpak_data, ".notebooklm")
+    return os.path.join(home, ".notebooklm")
+
+_NOTEBOOKLM_DIR = get_notebooklm_dir()
+_HOME_LIBS = os.path.join(_NOTEBOOKLM_DIR, "libs")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LIBS_DIR = os.path.join(SCRIPT_DIR, 'libs')
-sys.path.insert(0, LIBS_DIR)
+_ADDON_LIBS = os.path.join(SCRIPT_DIR, 'libs')
+
+for libs_path in [_HOME_LIBS, _ADDON_LIBS]:
+    if libs_path not in sys.path:
+        sys.path.insert(0, libs_path)
 
 
 def detect_browser():

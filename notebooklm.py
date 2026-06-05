@@ -8,29 +8,33 @@
 import sys
 import os
 from pathlib import Path
-
-# Get addon directory and set up libs path relative to it
-_ADDON_DIR = Path(__file__).parent
-_USER_SITE_PACKAGES = str(_ADDON_DIR / "libs")
-
-# Force add the path
-if _USER_SITE_PACKAGES not in sys.path:
-    sys.path.insert(0, _USER_SITE_PACKAGES)
-
 import json
 import re
 import asyncio
 import traceback
 
-# Cross-platform auth path handling
-if os.environ.get("FLATPAK_ID"):
-    # Flatpak environment
-    _NOTEBOOKLM_DIR = Path("/var/data/.notebooklm")
-else:
-    # Standard environment (Linux, Windows, Mac)
-    _NOTEBOOKLM_DIR = Path.home() / ".notebooklm"
+# Get addon directory
+_ADDON_DIR = Path(__file__).parent
 
-# ALWAYS define _NotebookLM_AUTH_PATH (fixes NameError)
+def _get_notebooklm_dir() -> Path:
+    """Get the base directory for NotebookLM persistent files (credentials, libraries)."""
+    if os.environ.get("FLATPAK_ID"):
+        return Path("/var/data/.notebooklm")
+    flatpak_data = Path.home() / ".var" / "app" / "net.ankiweb.Anki" / "data"
+    if flatpak_data.exists():
+        return flatpak_data / ".notebooklm"
+    return Path.home() / ".notebooklm"
+
+_NOTEBOOKLM_DIR = _get_notebooklm_dir()
+_HOME_LIBS = _NOTEBOOKLM_DIR / "libs"
+_ADDON_LIBS = _ADDON_DIR / "libs"
+
+# Add both paths to sys.path (prioritize home libs for updates)
+for libs_path in [str(_HOME_LIBS), str(_ADDON_LIBS)]:
+    if libs_path not in sys.path:
+        sys.path.insert(0, libs_path)
+
+# ALWAYS define _NotebookLM_AUTH_PATH
 _NotebookLM_AUTH_PATH = str(_NOTEBOOKLM_DIR / "storage_state.json")
 os.environ.setdefault("NOTEBOOKLM_HOME", str(_NOTEBOOKLM_DIR))
 

@@ -9,8 +9,16 @@ REM Get the directory where this bat file is located
 for %%i in ("%~dp0.") do set "ADDON_DIR=%%~fi"
 cd /d "%ADDON_DIR%"
 
-REM Set PYTHONPATH to use bundled libs
-set "PYTHONPATH=%ADDON_DIR%\libs"
+REM Determine persistent directories (outside the addon folder so they survive updates)
+set "NOTEBOOKLM_DIR=%USERPROFILE%\.notebooklm"
+set "LIBS_DIR=%NOTEBOOKLM_DIR%\libs"
+set "BROWSERS_DIR=%NOTEBOOKLM_DIR%\browsers"
+
+if not exist "%LIBS_DIR%" mkdir "%LIBS_DIR%"
+if not exist "%BROWSERS_DIR%" mkdir "%BROWSERS_DIR%"
+
+REM Set PYTHONPATH to use persistent libs
+set "PYTHONPATH=%LIBS_DIR%"
 echo PYTHONPATH set to: %PYTHONPATH%
 echo.
 
@@ -71,13 +79,13 @@ echo.
 
 :check_playwright
 echo Checking if Playwright is installed in bundled libs...
-echo Checking: %ADDON_DIR%\libs
+echo Checking: %LIBS_DIR%
 
 REM Check if playwright folder exists first
-if exist "%ADDON_DIR%\libs\playwright" (
+if exist "%LIBS_DIR%\playwright" (
     echo Playwright package folder found.
     REM Try to import
-    for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+    for /f "delims=" %%P in ("%LIBS_DIR%") do set LIBS_PATH=%%~P
     %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import playwright" >nul 2>&1
     if %errorlevel%==0 (
         echo Playwright already installed and working.
@@ -90,7 +98,7 @@ if exist "%ADDON_DIR%\libs\playwright" (
 
 :install_playwright
 REM Set LIBS_PATH for installation
-for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+for /f "delims=" %%P in ("%LIBS_DIR%") do set LIBS_PATH=%%~P
 
 echo Playwright not found. Installing now...
 echo This may take a few minutes...
@@ -100,7 +108,7 @@ REM Clear pip cache first (fixes deserialization errors)
 %PYTHON_CMD% -m pip cache purge >nul 2>&1
 
 REM Install notebooklm-py and all dependencies
-%PYTHON_CMD% -m pip install --upgrade --target="%ADDON_DIR%\libs" "notebooklm-py[browser]" pypdf
+%PYTHON_CMD% -m pip install --upgrade --target="%LIBS_DIR%" "notebooklm-py[browser]" pypdf
 
 if %errorlevel% neq 0 (
     echo.
@@ -109,7 +117,7 @@ if %errorlevel% neq 0 (
     echo This might be a temporary network issue. Please try again.
     echo.
     echo If the problem persists, try running:
-    echo    %PYTHON_CMD% -m pip install --target="%ADDON_DIR%\libs" playwright
+    echo    %PYTHON_CMD% -m pip install --target="%LIBS_DIR%" playwright
     echo.
     pause
     exit /b 1
@@ -117,19 +125,19 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Verifying installation...
-echo Checking libs folder: %ADDON_DIR%\libs
+echo Checking libs folder: %LIBS_DIR%
 
 REM Check if playwright folder exists in libs
-if not exist "%ADDON_DIR%\libs\playwright" (
+if not exist "%LIBS_DIR%\playwright" (
     echo ERROR: playwright folder not found in libs!
-    echo Expected: %ADDON_DIR%\libs\playwright
+    echo Expected: %LIBS_DIR%\playwright
     pause
     exit /b 1
 )
 echo Playwright folder found in libs.
 
 REM Try to import with package cache invalidation (fixes first-run issue)
-for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+for /f "delims=" %%P in ("%LIBS_DIR%") do set LIBS_PATH=%%~P
 
 REM First, try to initialize the package cache
 echo Running Python package cache initialization...
@@ -170,16 +178,16 @@ goto :ask_browser
 
 :verify_playwright_libs
 echo Verifying bundled Playwright works...
-echo Checking libs folder: %ADDON_DIR%\libs
+echo Checking libs folder: %LIBS_DIR%
 
 REM Check if playwright folder exists
-if not exist "%ADDON_DIR%\libs\playwright" (
+if not exist "%LIBS_DIR%\playwright" (
     echo Playwright folder not found. Installing...
     goto :install_playwright
 )
 
 REM Verify imports work with package cache invalidation
-for /f "delims=" %%P in ("%ADDON_DIR%\libs") do set LIBS_PATH=%%~P
+for /f "delims=" %%P in ("%LIBS_DIR%") do set LIBS_PATH=%%~P
 %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_PATH%'); import importlib; importlib.invalidate_caches(); import playwright; import pyee; import greenlet; print('OK')" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Bundled Playwright verification failed. Trying reinstall...
@@ -264,8 +272,8 @@ echo Using system Chrome: %NOTEBOOKLM_BROWSER_PATH%
 echo.
 
 REM Save browser path to config file for addon
-echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH% > "%ADDON_DIR%\browser_config.ini"
-echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
+echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH% > "%NOTEBOOKLM_DIR%\browser_config.ini"
+echo Browser configuration saved to: %NOTEBOOKLM_DIR%\browser_config.ini
 echo.
 
 REM Set environment variable for this session
@@ -277,15 +285,15 @@ echo.
 echo Installing Playwright Chromium browser...
 echo This may take a few minutes and requires internet connection.
 echo.
-set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
-if not exist "%ADDON_DIR%\browsers" mkdir "%ADDON_DIR%\browsers"
+set PLAYWRIGHT_BROWSERS_PATH=%BROWSERS_DIR%
+if not exist "%BROWSERS_DIR%" mkdir "%BROWSERS_DIR%"
 
 REM Check if Playwright and Chromium are already installed (skip slow install)
 echo Checking if Playwright is already installed...
 %PYTHON_CMD% -c "import playwright; print('Playwright installed')" >nul 2>&1
 if %errorlevel%==0 (
     echo Playwright already installed, checking Chromium...
-    set PYTHONPATH=%ADDON_DIR%\libs
+    set PYTHONPATH=%LIBS_DIR%
     %PYTHON_CMD% -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start().chromium.launchable_channels(); sync_playwright().stop()" >nul 2>&1
     if %errorlevel%==0 (
         echo Chromium already available, skipping installation!
@@ -294,7 +302,7 @@ if %errorlevel%==0 (
 )
 
 REM Set PYTHONPATH so playwright can be found
-set PYTHONPATH=%ADDON_DIR%\libs
+set PYTHONPATH=%LIBS_DIR%
 %PYTHON_CMD% -m playwright install chromium
 if %errorlevel% neq 0 (
     echo.
@@ -310,8 +318,8 @@ echo Chromium installed successfully.
 echo.
 
 REM Save browser config for addon
-echo PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers > "%ADDON_DIR%\browser_config.ini"
-echo Browser configuration saved to: %ADDON_DIR%\browser_config.ini
+echo PLAYWRIGHT_BROWSERS_PATH=%BROWSERS_DIR% > "%NOTEBOOKLM_DIR%\browser_config.ini"
+echo Browser configuration saved to: %NOTEBOOKLM_DIR%\browser_config.ini
 
 :run_custom_login
 echo.
@@ -342,19 +350,19 @@ echo Running authentication...
 echo.
 
 REM Set environment for notebooklm login
-set PYTHONPATH=%ADDON_DIR%\libs
+set PYTHONPATH=%LIBS_DIR%
 
 REM Load browser config if exists
-if exist "%ADDON_DIR%\browser_config.ini" (
-    for /f "usebackq tokens=1,* delims==" %%a in ("%ADDON_DIR%\browser_config.ini") do (
+if exist "%NOTEBOOKLM_DIR%\browser_config.ini" (
+    for /f "usebackq tokens=1,* delims==" %%a in ("%NOTEBOOKLM_DIR%\browser_config.ini") do (
         if "%%a"=="NOTEBOOKLM_BROWSER_PATH" set NOTEBOOKLM_BROWSER_PATH=%%b
         if "%%a"=="PLAYWRIGHT_BROWSERS_PATH" set PLAYWRIGHT_BROWSERS_PATH=%%b
     )
 )
 
 REM Set browser path if using chromium
-if exist "%ADDON_DIR%\browsers" (
-    set PLAYWRIGHT_BROWSERS_PATH=%ADDON_DIR%\browsers
+if exist "%BROWSERS_DIR%" (
+    set PLAYWRIGHT_BROWSERS_PATH=%BROWSERS_DIR%
 )
 
 REM Add debug output
@@ -366,8 +374,8 @@ echo PLAYWRIGHT_BROWSERS_PATH=%PLAYWRIGHT_BROWSERS_PATH%
 echo.
 
 REM Set environment variables at batch level (for current session AND subprocesses)
-set PYTHONPATH=%ADDON_DIR%\libs
-set PYTHONPATH=%PYTHONPATH%;%ADDON_DIR%\libs
+set PYTHONPATH=%LIBS_DIR%
+set PYTHONPATH=%PYTHONPATH%;%LIBS_DIR%
 
 REM Set NOTEBOOKLM_HOME to ensure notebooklm knows where to save files
 set NOTEBOOKLM_HOME=%USERPROFILE%\.notebooklm
@@ -388,7 +396,7 @@ echo.
 REM Test if playwright can be imported (critical for browser launch)
 echo.
 echo Testing playwright import...
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import playwright; print('playwright OK')" 2>&1
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_DIR%'); import playwright; print('playwright OK')" 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Cannot import playwright!
@@ -401,7 +409,7 @@ echo playwright imported successfully.
 REM Test if notebooklm module can be imported
 echo.
 echo Testing notebooklm module import...
-%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import notebooklm; print('notebooklm module OK')" 2>&1
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_DIR%'); import notebooklm; print('notebooklm module OK')" 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Cannot import notebooklm module!
@@ -426,7 +434,7 @@ echo NOTEBOOKLM_BROWSER_PATH=%NOTEBOOKLM_BROWSER_PATH%
 if not "%NOTEBOOKLM_BROWSER_PATH%"=="" (
     echo.
     echo TEST 1: Trying to launch Chrome via channel...
-    %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import os; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(channel='chrome', headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result1.txt
+    %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_DIR%'); import os; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(channel='chrome', headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result1.txt
     if exist tmp_result1.txt (
         echo   Result: SUCCESS - Browser launched via channel!
         del tmp_result1.txt
@@ -435,7 +443,7 @@ if not "%NOTEBOOKLM_BROWSER_PATH%"=="" (
         
         echo.
         echo TEST 2: Trying with executable_path...
-        %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%ADDON_DIR%\libs'); import os; from playwright.sync_api import sync_playwright; browser_path = os.environ.get('NOTEBOOKLM_BROWSER_PATH', '').strip(); p=sync_playwright().start(); b=p.chromium.launch(executable_path=browser_path, headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result2.txt
+        %PYTHON_CMD% -c "import sys; sys.path.insert(0, r'%LIBS_DIR%'); import os; from playwright.sync_api import sync_playwright; browser_path = os.environ.get('NOTEBOOKLM_BROWSER_PATH', '').strip(); p=sync_playwright().start(); b=p.chromium.launch(executable_path=browser_path, headless=False); b.close(); p.stop(); print('SUCCESS')" 2>&1 | findstr /C:"SUCCESS" > tmp_result2.txt
         if exist tmp_result2.txt (
             echo   Result: SUCCESS - Browser launched via executable_path!
             del tmp_result2.txt
@@ -459,7 +467,7 @@ echo This should open a browser window for authentication.
 echo ========================================
 echo CUSTOM LOGIN START
 echo ========================================
-set PYTHONPATH=%ADDON_DIR%\libs
+set PYTHONPATH=%LIBS_DIR%
 %PYTHON_CMD% "%ADDON_DIR%\custom_login.py"
 set LOGIN_RESULT=%errorlevel%
 echo ========================================

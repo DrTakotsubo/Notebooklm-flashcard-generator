@@ -16,8 +16,19 @@ echo
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Set PYTHONPATH to use bundled libs
-export PYTHONPATH="$SCRIPT_DIR/libs"
+# Determine persistent directories (outside the addon folder so they survive updates)
+NOTEBOOKLM_DIR="$HOME/.notebooklm"
+if [ -d "$HOME/.var/app/net.ankiweb.Anki/data" ]; then
+    NOTEBOOKLM_DIR="$HOME/.var/app/net.ankiweb.Anki/data/.notebooklm"
+fi
+LIBS_DIR="$NOTEBOOKLM_DIR/libs"
+BROWSERS_DIR="$NOTEBOOKLM_DIR/browsers"
+
+mkdir -p "$LIBS_DIR"
+mkdir -p "$BROWSERS_DIR"
+
+# Set PYTHONPATH to use persistent libs
+export PYTHONPATH="$LIBS_DIR"
 echo "PYTHONPATH set to: $PYTHONPATH"
 echo
 
@@ -43,18 +54,18 @@ fi
 echo "Using Python: $($PYTHON_CMD --version)"
 echo
 
-# Check if playwright is already installed in bundled libs
+# Check if playwright is already installed in persistent libs
 PLAYWRIGHT_INSTALLED=false
-if $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" &> /dev/null; then
-    echo "Playwright already installed in bundled libs."
+if $PYTHON_CMD -c "import sys; sys.path.insert(0, '$LIBS_DIR'); import playwright" &> /dev/null; then
+    echo "Playwright already installed in persistent libs."
     PLAYWRIGHT_INSTALLED=true
     
     # Verify it actually works
-    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
-        echo "Bundled Playwright verification failed. Reinstalling..."
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$LIBS_DIR'); import playwright; import pyee; import greenlet" &> /dev/null; then
+        echo "Persistent Playwright verification failed. Reinstalling..."
         PLAYWRIGHT_INSTALLED=false
     else
-        echo "Bundled Playwright verified."
+        echo "Persistent Playwright verified."
     fi
 fi
 
@@ -66,11 +77,8 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
     # Clear pip cache first (fixes deserialization errors)
     $PYTHON_CMD -m pip cache purge &> /dev/null || true
 
-    # Create libs directory if it doesn't exist
-    mkdir -p "$SCRIPT_DIR/libs"
-
-    # Install notebooklm-py and all dependencies
-    $PYTHON_CMD -m pip install --upgrade --target="$SCRIPT_DIR/libs" "notebooklm-py[browser]" pypdf
+    # Install notebooklm-py, pypdf and all dependencies
+    $PYTHON_CMD -m pip install --upgrade --target="$LIBS_DIR" "notebooklm-py[browser]" pypdf
 
     if [[ $? -ne 0 ]]; then
         echo
@@ -90,7 +98,7 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
 
     echo
     echo "Verifying installation..."
-    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright; import pyee; import greenlet" &> /dev/null; then
+    if ! $PYTHON_CMD -c "import sys; sys.path.insert(0, '$LIBS_DIR'); import playwright; import pyee; import greenlet" &> /dev/null; then
         echo
         echo "ERROR: Installation verification failed."
         echo "Playwright was installed but cannot be imported."
@@ -108,9 +116,7 @@ if [ "$PLAYWRIGHT_INSTALLED" = false ]; then
 
     echo "Playwright and dependencies installed successfully."
     echo
-
 fi
-
 
 # Browser selection menu
 echo
@@ -120,8 +126,8 @@ echo "=============================================="
 echo
 echo "The authentication requires a browser. Choose one:"
 echo
-echo "1. Use system Chrome (RECOMMENDED - no download)"
-echo "   - Uses your installed Chrome browser"
+echo "1. Use system browser (Chrome/Brave/Edge/Firefox etc. - RECOMMENDED)"
+echo "   - Detects and uses your installed browser"
 echo "   - Faster, no extra downloads"
 echo
 echo "2. Use Playwright Chromium (requires download ~300MB)"
@@ -152,25 +158,25 @@ if [[ "$BROWSER_CHOICE" == "1" ]]; then
             echo "Using system browser: $NOTEBOOKLM_BROWSER_PATH"
             
             # Save browser config
-            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$SCRIPT_DIR/browser_config.ini"
-            echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
+            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$NOTEBOOKLM_DIR/browser_config.ini"
+            echo "Browser configuration saved to: $NOTEBOOKLM_DIR/browser_config.ini"
         else
             echo
-            echo "ERROR: Chrome path is not executable: $CHROME_PATH"
+            echo "ERROR: Browser path is not executable: $CHROME_PATH"
             echo "Falling back to Playwright Chromium..."
             BROWSER_CHOICE="2"
         fi
     else
         echo
-        echo "Chrome not found in PATH."
-        read -p "Enter full path to Chrome (or press ENTER to use Chromium): " MANUAL_PATH
+        echo "System browser not found in PATH."
+        read -p "Enter full path to your browser (or press ENTER to use Chromium): " MANUAL_PATH
         if [[ -n "$MANUAL_PATH" && -x "$MANUAL_PATH" ]]; then
             export NOTEBOOKLM_BROWSER_PATH="$MANUAL_PATH"
             echo
             echo "Using: $NOTEBOOKLM_BROWSER_PATH"
             # Save browser config
-            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$SCRIPT_DIR/browser_config.ini"
-            echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
+            echo "NOTEBOOKLM_BROWSER_PATH=$NOTEBOOKLM_BROWSER_PATH" > "$NOTEBOOKLM_DIR/browser_config.ini"
+            echo "Browser configuration saved to: $NOTEBOOKLM_DIR/browser_config.ini"
         else
             echo
             echo "Falling back to Playwright Chromium..."
@@ -186,11 +192,11 @@ if [[ "$BROWSER_CHOICE" == "2" ]]; then
     echo "This may take a few minutes and requires internet connection."
     echo
 
-    # Set PLAYWRIGHT_BROWSERS_PATH to bundle browsers in addon directory
-    export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
+    # Set PLAYWRIGHT_BROWSERS_PATH to persistent folder
+    export PLAYWRIGHT_BROWSERS_PATH="$BROWSERS_DIR"
     mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
 
-    $PYTHON_CMD -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/libs'); import playwright" -m playwright install chromium
+    $PYTHON_CMD -c "import sys; sys.path.insert(0, '$LIBS_DIR'); import playwright" -m playwright install chromium
     if [[ $? -ne 0 ]]; then
         echo
         echo "ERROR: Failed to install Chromium."
@@ -202,15 +208,15 @@ if [[ "$BROWSER_CHOICE" == "2" ]]; then
         echo "Solutions:"
         echo "1. Check your internet connection"
         echo "2. Temporarily disable firewall/antivirus"
-        echo "3. Use system Chrome instead (run script again, choose option 1)"
+        echo "3. Use system browser instead (run script again, choose option 1)"
         echo
         exit 1
     fi
     echo "Chromium installed successfully to: $PLAYWRIGHT_BROWSERS_PATH"
     
     # Save browser config
-    echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" > "$SCRIPT_DIR/browser_config.ini"
-    echo "Browser configuration saved to: $SCRIPT_DIR/browser_config.ini"
+    echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" > "$NOTEBOOKLM_DIR/browser_config.ini"
+    echo "Browser configuration saved to: $NOTEBOOKLM_DIR/browser_config.ini"
 fi
 
 echo
@@ -233,33 +239,29 @@ echo "Running authentication..."
 echo
 
 # Set environment for notebooklm login
-export PYTHONPATH="$SCRIPT_DIR/libs"
-export NOTEBOOKLM_HOME="$HOME/.notebooklm"
+export PYTHONPATH="$LIBS_DIR"
+export NOTEBOOKLM_HOME="$NOTEBOOKLM_DIR"
 
 # Load browser config if exists
-if [[ -f "$SCRIPT_DIR/browser_config.ini" ]]; then
-    source "$SCRIPT_DIR/browser_config.ini"
-    echo "Loaded browser configuration from: $SCRIPT_DIR/browser_config.ini"
+if [[ -f "$NOTEBOOKLM_DIR/browser_config.ini" ]]; then
+    source "$NOTEBOOKLM_DIR/browser_config.ini"
+    echo "Loaded browser configuration from: $NOTEBOOKLM_DIR/browser_config.ini"
 fi
 
 # Set browser path if using chromium
-if [[ -d "$SCRIPT_DIR/browsers" ]]; then
-    export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/browsers"
+if [[ -d "$BROWSERS_DIR" ]]; then
+    export PLAYWRIGHT_BROWSERS_PATH="$BROWSERS_DIR"
 fi
 
 echo "NOTEBOOKLM_HOME=$NOTEBOOKLM_HOME"
 echo
 
-# Note: Using custom_login.py which uses Playwright directly
-
-# Run custom login script that uses Playwright directly (bypasses notebooklm issues)
+# Run custom login script
 echo
-echo "Running custom login script (using Playwright directly)..."
-echo "This should open a browser window for authentication."
+echo "Running custom login script..."
 echo "================================================"
 echo "CUSTOM LOGIN START"
 echo "================================================"
-export PYTHONPATH="$SCRIPT_DIR/libs"
 python3 "$SCRIPT_DIR/custom_login.py"
 echo "================================================"
 echo "CUSTOM LOGIN END"
@@ -267,34 +269,15 @@ echo "================================================"
 echo
 
 # Verify credentials
-STORAGE_PATH="$HOME/.notebooklm/storage_state.json"
+STORAGE_PATH="$NOTEBOOKLM_DIR/storage_state.json"
 if [[ -f "$STORAGE_PATH" ]]; then
     echo
     echo "=============================================="
     echo "SUCCESS: Credentials saved!"
     echo "Location: $STORAGE_PATH"
     echo
-
-    # Copy credentials to addon directory for portability
-    cp "$STORAGE_PATH" "$SCRIPT_DIR/storage_state.json" 2>/dev/null || true
-    if [[ -f "$SCRIPT_DIR/storage_state.json" ]]; then
-        echo "Credentials also copied to addon directory for portability:"
-        echo "$SCRIPT_DIR/storage_state.json"
-        echo
-    fi
-
     echo "You can now use the addon in Anki."
     echo "=============================================="
-
-    # For Flatpak users, copy to the correct location
-    if [[ -d "$HOME/.var/app/net.ankiweb.Anki" ]]; then
-        FLATPAK_PATH="$HOME/.var/app/net.ankiweb.Anki/data/.notebooklm"
-        mkdir -p "$FLATPAK_PATH"
-        cp "$STORAGE_PATH" "$FLATPAK_PATH/"
-        echo
-        echo "Credentials also copied to Flatpak path:"
-        echo "$FLATPAK_PATH/storage_state.json"
-    fi
 else
     echo
     echo "=============================================="
@@ -302,8 +285,7 @@ else
     echo
     echo "Possible issues:"
     echo "1. You didn't complete the login in the Playwright browser"
-    echo "2. Playwright browser failed to open (check errors above)"
-    echo "3. You may have logged into the wrong browser window"
+    echo "2. Playwright browser failed to open"
     echo
     echo "Try running auth_helper.sh again."
     echo "=============================================="
