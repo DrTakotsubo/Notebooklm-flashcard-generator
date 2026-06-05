@@ -16,55 +16,94 @@ LIBS_DIR = os.path.join(SCRIPT_DIR, 'libs')
 sys.path.insert(0, LIBS_DIR)
 
 
-def find_chrome_path():
-    """Auto-detect Chrome/Chromium installation path across platforms."""
+def detect_browser():
+    """Detect any installed system browser path and return (path, browser_type)."""
     import sys
     import shutil
     
     # If environment variable is set and valid, prioritize it
     env_path = os.environ.get('NOTEBOOKLM_BROWSER_PATH', '').strip()
     if env_path and os.path.exists(env_path):
-        return env_path
+        b_type = "firefox" if "firefox" in env_path.lower() else "chromium"
+        return env_path, b_type
         
     if sys.platform == "win32":
-        possible_paths = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        # Windows paths for Chrome, Brave, Edge, Vivaldi, Firefox
+        chromium_paths = [
+            (r"C:\Program Files\Google\Chrome\Application\chrome.exe", "chromium"),
+            (r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe", "chromium"),
+            (os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"), "chromium"),
+            (r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe", "chromium"),
+            (r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe", "chromium"),
+            (os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"), "chromium"),
+            (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", "chromium"),
+            (r"C:\Program Files\Microsoft\Edge\Application\msedge.exe", "chromium"),
+            (r"C:\Program Files\Vivaldi\Application\vivaldi.exe", "chromium"),
+            (os.path.expandvars(r"%LOCALAPPDATA%\Vivaldi\Application\vivaldi.exe"), "chromium"),
         ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        try:
-            import subprocess
-            result = subprocess.run(['where', 'chrome'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                chrome_path = result.stdout.strip().split('\n')[0]
-                if os.path.exists(chrome_path):
-                    return chrome_path
-        except:
-            pass
-    elif sys.platform == "darwin":
-        possible_paths = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        firefox_paths = [
+            (r"C:\Program Files\Mozilla Firefox\firefox.exe", "firefox"),
+            (r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe", "firefox"),
         ]
-        for path in possible_paths:
+        
+        for path, b_type in chromium_paths + firefox_paths:
             if os.path.exists(path):
-                return path
-        for b in ["google-chrome", "chromium", "chromium-browser"]:
-            p = shutil.which(b)
-            if p:
-                return p
-    else:
-        # Linux
-        possible_commands = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
-        for cmd in possible_commands:
-            path = shutil.which(cmd)
-            if path:
-                return path
+                return path, b_type
                 
-    return None
+        # Try searching using where
+        for cmd, b_type in [("chrome", "chromium"), ("brave", "chromium"), ("msedge", "chromium"), ("firefox", "firefox")]:
+            try:
+                import subprocess
+                result = subprocess.run(['where', cmd], capture_output=True, text=True, timeout=3)
+                if result.returncode == 0:
+                    path = result.stdout.strip().split('\n')[0]
+                    if os.path.exists(path):
+                        return path, b_type
+            except:
+                pass
+                
+    elif sys.platform == "darwin":
+        # macOS paths
+        paths = [
+            ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "chromium"),
+            ("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", "chromium"),
+            ("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", "chromium"),
+            ("/Applications/Vivaldi.app/Contents/MacOS/Vivaldi", "chromium"),
+            ("/Applications/Firefox.app/Contents/MacOS/firefox", "firefox"),
+        ]
+        for path, b_type in paths:
+            if os.path.exists(path):
+                return path, b_type
+                
+        # Fallback to path check
+        for cmd, b_type in [("google-chrome", "chromium"), ("brave", "chromium"), ("chromium", "chromium"), ("firefox", "firefox")]:
+            p = shutil.which(cmd)
+            if p:
+                return p, b_type
+                
+    else:
+        # Linux paths & commands
+        cmds = [
+            ("google-chrome", "chromium"),
+            ("google-chrome-stable", "chromium"),
+            ("brave-browser", "chromium"),
+            ("brave", "chromium"),
+            ("brave-browser-stable", "chromium"),
+            ("chromium", "chromium"),
+            ("chromium-browser", "chromium"),
+            ("microsoft-edge", "chromium"),
+            ("microsoft-edge-stable", "chromium"),
+            ("vivaldi", "chromium"),
+            ("vivaldi-stable", "chromium"),
+            ("opera", "chromium"),
+            ("firefox", "firefox"),
+        ]
+        for cmd, b_type in cmds:
+            p = shutil.which(cmd)
+            if p:
+                return p, b_type
+                
+    return None, None
 
 
 def check_cookies(context):
@@ -109,46 +148,58 @@ def main():
     print(f"Storage path: {storage_file}")
     print()
     
-    chrome_path = find_chrome_path()
-    if chrome_path:
-        print(f"Found Chrome: {chrome_path}")
+    browser_path, browser_type = detect_browser()
+    if browser_path:
+        print(f"Detected browser: {browser_path} ({browser_type})")
     else:
-        print("Chrome not found!")
+        print("No compatible system browser detected.")
     
     print()
     
     with sync_playwright() as p:
-        launch_args = {
-            "headless": False,
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-                "--password-store=basic",
-                "--incognito",
-            ],
-            "ignore_default_args": ["--enable-automation"],
-        }
-        
         print("Launching browser...")
         browser = None
         
-        if chrome_path:
+        # Configure launch args based on browser type
+        if browser_type == "firefox":
+            launch_args = {
+                "headless": False,
+                "args": ["-private"],
+            }
+        else:
+            launch_args = {
+                "headless": False,
+                "args": [
+                    "--disable-blink-features=AutomationControlled",
+                    "--password-store=basic",
+                    "--incognito",
+                ],
+                "ignore_default_args": ["--enable-automation"],
+            }
+            
+        if browser_path and browser_type:
             try:
-                browser = p.chromium.launch(executable_path=chrome_path, **launch_args)
-                print("SUCCESS: Browser launched using detected Chrome path")
+                # Select correct engine based on browser type
+                engine = p.firefox if browser_type == "firefox" else p.chromium
+                browser = engine.launch(executable_path=browser_path, **launch_args)
+                print(f"SUCCESS: Browser launched using detected path: {browser_path}")
             except Exception as e:
-                print(f"ERROR with detected path: {e}")
-        
-        if browser is None and browser_path and os.path.exists(browser_path):
-            try:
-                browser = p.chromium.launch(executable_path=browser_path, **launch_args)
-                print("SUCCESS: Browser launched using NOTEBOOKLM_BROWSER_PATH")
-            except Exception as e:
-                print(f"ERROR with env path: {e}")
+                print(f"ERROR launching detected browser: {e}")
                 
         if browser is None:
             try:
                 print("Attempting to launch using Playwright's built-in Chromium...")
-                browser = p.chromium.launch(**launch_args)
+                # Built-in Chromium args
+                builtin_launch_args = {
+                    "headless": False,
+                    "args": [
+                        "--disable-blink-features=AutomationControlled",
+                        "--password-store=basic",
+                        "--incognito",
+                    ],
+                    "ignore_default_args": ["--enable-automation"],
+                }
+                browser = p.chromium.launch(**builtin_launch_args)
                 print("SUCCESS: Browser launched using built-in Chromium")
             except Exception as e:
                 print(f"ERROR with built-in Chromium: {e}")
@@ -156,10 +207,11 @@ def main():
         if browser is None:
             print()
             print("=" * 50)
-            print("ERROR: Could not launch Chrome or Playwright Chromium")
+            print("ERROR: Could not launch any browser")
             print("=" * 50)
             print()
-            print("Please ensure Google Chrome is installed, or run Option 2 to download Playwright Chromium.")
+            print("Please ensure Google Chrome, Brave, Edge, Firefox, Vivaldi, or Opera is installed.")
+            print("Alternatively, run Option 2 in auth_helper to download Playwright Chromium.")
             return 1
         
         context = browser.new_context(ignore_https_errors=True)

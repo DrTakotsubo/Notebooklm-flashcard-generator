@@ -132,11 +132,11 @@ read -p "Enter 1 or 2 (default: 1): " BROWSER_CHOICE
 BROWSER_CHOICE=${BROWSER_CHOICE:-1}
 
 if [[ "$BROWSER_CHOICE" == "1" ]]; then
-    # Try to find Chrome/Chromium
+    # Try to find common system browsers (Chrome, Brave, Edge, Chromium, Vivaldi, Opera, Firefox)
     CHROME_PATH=""
-    for browser in google-chrome chromium chromium-browser /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome; do
+    for browser in google-chrome google-chrome-stable brave-browser brave microsoft-edge microsoft-edge-stable chromium chromium-browser vivaldi vivaldi-stable opera firefox "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi" "/Applications/Firefox.app/Contents/MacOS/firefox"; do
         if command -v "$browser" &> /dev/null; then
-            CHROME_PATH="$browser"
+            CHROME_PATH="$(command -v "$browser")"
             break
         elif [[ -x "$browser" ]]; then
             CHROME_PATH="$browser"
