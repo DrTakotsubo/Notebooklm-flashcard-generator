@@ -408,16 +408,16 @@ class NotebookLMDialog(QDialog):
         self.progress_label.setStyleSheet("color: gray; font-style: italic;")
         self.progress_label.setVisible(False)
 
-        # Auth warning label
-        self.auth_warning_label = QLabel("")
-        self.auth_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._update_auth_warning()
-
         # Re-authenticate button
         self.reauth_btn = QPushButton("Re-authenticate")
         self.reauth_btn.setFixedWidth(150)
         self.reauth_btn.setVisible(False)
         self.reauth_btn.clicked.connect(self._reauthenticate)
+
+        # Auth warning label
+        self.auth_warning_label = QLabel("")
+        self.auth_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._update_auth_warning()
 
         # Auth button layout
         auth_btn_layout = QHBoxLayout()
