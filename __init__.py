@@ -662,11 +662,9 @@ class NotebookLMDialog(QDialog):
         current_prompts = load_prompts(NOTEBOOKLM_PROMPTS)
         default_keys = list(NOTEBOOKLM_PROMPTS.keys())
         
-        dialog = PromptManagerDialog(current_prompts, default_keys, self)
-        if dialog.exec():
-            # Update the dropdown with new prompts
-            self._populate_prompts()
-            showInfo("Prompts updated successfully!", title="Prompts Saved")
+        dialog.exec()
+        # Always update the dropdown with new prompts
+        self._populate_prompts()
 
     # -- Anki note creation ---------------------------------------------------
 

@@ -94,14 +94,14 @@ class PromptManagerDialog(QDialog):
         )
         layout.addWidget(self.text_edit)
         
-        # Save/Cancel buttons
+        # Save/Close buttons
         button_layout = QHBoxLayout()
         self.save_btn = QPushButton("Save Prompt")
         self.save_btn.clicked.connect(self._on_save)
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self.reject)
+        self.close_btn = QPushButton("Close")
+        self.close_btn.clicked.connect(self.accept)
         button_layout.addWidget(self.save_btn)
-        button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.close_btn)
         layout.addLayout(button_layout)
     
     def _populate_list(self):
@@ -111,7 +111,6 @@ class PromptManagerDialog(QDialog):
             # Mark default prompts
             if name in self.default_keys:
                 item.setText(f"{name} (Default)")
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)  # Disable deletion
             self.list_widget.addItem(item)
     
     def _on_select_prompt(self, current, previous):
