@@ -706,7 +706,10 @@ def _create_notebooklm_icon():
 
 
 # Add button to toolbar (after existing buttons)
-toolbar_action = QAction(_create_notebooklm_icon(), "NotebookLM", mw)
-toolbar_action.setToolTip("Generate flashcards from PDF with NotebookLM")
-toolbar_action.triggered.connect(_launch_dialog)
-mw.form.toolBar.addAction(toolbar_action)
+try:
+    toolbar_action = QAction(_create_notebooklm_icon(), "NotebookLM", mw)
+    toolbar_action.setToolTip("Generate flashcards from PDF with NotebookLM")
+    toolbar_action.triggered.connect(_launch_dialog)
+    mw.form.toolBar.addAction(toolbar_action)
+except Exception:
+    pass
