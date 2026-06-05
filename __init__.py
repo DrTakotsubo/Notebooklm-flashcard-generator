@@ -231,15 +231,11 @@ def check_auth_age():
     
     # Generate message based on age
     if days_old == 0:
-        message = "Authenticated today"
+        message = "Authenticated today (Session active)"
     elif days_old == 1:
-        message = "Authenticated yesterday"
-    elif days_old < 5:
-        message = f"⚠️ Auth expires in {5 - days_old} day(s)"
-    elif days_old < 25:
-        message = f"Authenticated {days_old} days ago"
+        message = "Authenticated yesterday (Session active)"
     else:
-        message = f"⚠️ Auth expires soon ({days_old} days). Click 'Re-authenticate'"
+        message = f"Authenticated {days_old} days ago (Session active)"
     
     return (days_old, message)
 
@@ -497,22 +493,12 @@ class NotebookLMDialog(QDialog):
         self.auth_warning_label.setText(message)
         
         # Show warning styling for expiry situations
-        if days_old is not None and days_old >= 25:
-            self.auth_warning_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
-            self.reauth_btn.setVisible(True)
-        elif days_old is not None and days_old >= 5:
-            self.auth_warning_label.setStyleSheet("color: #f57c00;")
-            self.reauth_btn.setVisible(False)
-        elif days_old is None:
+        if days_old is None:
             self.auth_warning_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
             self.reauth_btn.setVisible(True)
         else:
-            # Less than 5 days - show countdown
-            if days_old is not None:
-                days_left = 5 - days_old
-                self.auth_warning_label.setText(f"⚠️ Auth expires in {days_left} day(s)")
-            self.auth_warning_label.setStyleSheet("color: #1976d2;")
-            self.reauth_btn.setVisible(False)
+            self.auth_warning_label.setStyleSheet("color: #2e7d32; font-weight: bold;")
+            self.reauth_btn.setVisible(True)
 
     def _reauthenticate(self):
         """Launch the auth helper to re-authenticate."""
